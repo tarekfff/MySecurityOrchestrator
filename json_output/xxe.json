@@ -1,0 +1,66 @@
+{
+  "source": "AI Analyzer",
+  "severity": "CRITICAL",
+  "title": "XML External Entity (XXE) Injection Attack on File Upload",
+  "playbook_id": "PB-XML-XXE-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Block the source IP associated with the detected XXE payload: <!ENTITY xxe SYSTEM 'file:///etc/hostname'>",
+      "priorityLevel": "CRITICAL",
+      "integration": "paloalto",
+      "target": "Firewall-Main-Cluster",
+      "params": {
+        "action": "block",
+        "duration": "24h"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000002-0000-0000-0000-000000000002",
+      "message": "Search Splunk logs for all XML upload attempts containing 'SYSTEM' or 'PUBLIC' entity keywords from the last 24 hours.",
+      "priorityLevel": "HIGH",
+      "integration": "splunk",
+      "target": "SIEM-Search-Api",
+      "params": {
+        "query": "index=web_logs payload='*SYSTEM*'",
+        "earliest": "-24h"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Implement code-level mitigation by disabling DTD (Document Type Definitions) and External Entity processing in the application's XML parser. Reference WAHH Chapter 13 regarding input validation routine logic flaws.",
+      "priorityLevel": "CRITICAL",
+      "integration": "github",
+      "target": "Web-App-Repository",
+      "params": {
+        "script_path": "security/mitigation/harden_xml_parser.py",
+        "action": "enforce_no_dtd"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Verify the effectiveness of the code patch and the integrity of the /etc/hostname file on the affected server.",
+      "priorityLevel": "MEDIUM",
+      "integration": "jira",
+      "target": "Security-Board"
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Executive review of the data breach risk assessment. XXE attempted to access system-level files (/etc/hostname).",
+      "priorityLevel": "HIGH",
+      "integration": "email",
+      "target": "C-Suite-Alert-System"
+    }
+  ]
+}

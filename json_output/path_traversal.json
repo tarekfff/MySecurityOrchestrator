@@ -1,0 +1,66 @@
+{
+  "source": "AI Analyzer",
+  "severity": "CRITICAL",
+  "title": "Path Traversal Attack Detected: Access to Sensitive System Files",
+  "playbook_id": "PB-PATH-TRAVERSAL-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "SCRIPT",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Immediately terminate the user's session and suspend the account associated with the request to ../../etc/shadow as per KB instructions.",
+      "priorityLevel": "CRITICAL",
+      "integration": "active_directory",
+      "target": "user_session_manager",
+      "params": {
+        "action": "suspend",
+        "reason": "Path Traversal Attempt"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000002-0000-0000-0000-000000000002",
+      "message": "Monitor filesystem activity using strace/ltrace (Linux) or FileMon (Windows) to identify if any other files were successfully accessed during the traversal attempt.",
+      "priorityLevel": "HIGH",
+      "integration": "sentinelone",
+      "target": "affected_web_server",
+      "params": {
+        "action": "filesystem_audit",
+        "path": "/etc/"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Perform a line-by-line code review of the /download endpoint. Implement robust input validation that rejects traversal sequences (../), double-encoded forms (%252e), and illegal Unicode representations. Ensure the application is not performing redundant decoding after validation.",
+      "priorityLevel": "HIGH",
+      "integration": "github",
+      "target": "backend_api_repo",
+      "params": {
+        "file_path": "main.php",
+        "issue_category": "Vulnerability Remediation"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Approve the architectural shift to a chrooted filesystem or mounting the web-root as a separate logical drive to natively ignore traversal sequences.",
+      "priorityLevel": "MEDIUM",
+      "integration": "jira",
+      "target": "infrastructure_board"
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "LEGAL",
+      "assignedUser": "e5000001-0000-0000-0000-000000000001",
+      "message": "Assess the impact of the attempt to access /etc/shadow. Prepare a breach notification report if the monitoring tools indicate successful data exfiltration.",
+      "priorityLevel": "MEDIUM",
+      "integration": "slack",
+      "target": "legal_compliance_channel"
+    }
+  ]
+}

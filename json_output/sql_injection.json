@@ -1,0 +1,83 @@
+{
+  "source": "AI Analyzer",
+  "severity": "CRITICAL",
+  "title": "SQL Injection Detected on Login Interface",
+  "playbook_id": "PB-SQLI-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Identify and block the source IP address attempting the 'OR 1=1' injection in the WAF/SIEM.",
+      "priorityLevel": "CRITICAL",
+      "integration": "splunk",
+      "target": "Network Firewall",
+      "params": {
+        "action": "block",
+        "indicator": "src_ip"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "f7000001-0000-0000-0000-000000000001",
+      "message": "Perform an immediate full database backup as per KB guidance before probing or remediation to prevent data loss or corruption during the incident response.",
+      "priorityLevel": "HIGH",
+      "integration": "db_manager",
+      "target": "Production Database",
+      "params": {
+        "command": "BACKUP DATABASE [ApplicationDB] TO DISK = 'N:\\Backups\\PreRemediation.bak'"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Approve temporary suspension of the user registration and login modules to prevent further second-order SQL injection exploitation.",
+      "priorityLevel": "HIGH",
+      "integration": "workflow_engine",
+      "target": "Executive Management",
+      "params": {
+        "scope": "Login/Registration Endpoints"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Mitigate vulnerability by replacing dynamic SQL with Prepared Statements (Parameterized Queries). Escaping single quotes is insufficient due to the risk of second-order attacks mentioned in the KB.",
+      "priorityLevel": "CRITICAL",
+      "integration": "git_repository",
+      "target": "Auth Module Source Code",
+      "params": {
+        "remediation_type": "parameterization",
+        "language": "python"
+      }
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Conduct a scan for second-order SQL injection payloads stored in the 'users' table, specifically looking for malicious strings in usernames used for the password-change exploit.",
+      "priorityLevel": "MEDIUM",
+      "integration": "tenable_io",
+      "target": "Internal Database Scanner",
+      "params": {
+        "search_term": "' OR 1="
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "LEGAL",
+      "assignedUser": "e5000001-0000-0000-0000-000000000001",
+      "message": "Review database logs for error messages like '80040e07' or 'ODBC SQL Server Driver' to determine if password or sensitive data was disclosed via error-based injection.",
+      "priorityLevel": "MEDIUM",
+      "integration": "compliance_portal",
+      "target": "Data Privacy Office",
+      "params": {
+        "check": "Data Breach Notification"
+      }
+    }
+  ]
+}

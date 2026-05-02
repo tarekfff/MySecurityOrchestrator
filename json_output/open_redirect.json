@@ -1,0 +1,62 @@
+{
+  "source": "AI Analyzer",
+  "severity": "MEDIUM",
+  "title": "Unvalidated Redirect and HTTP Header Injection Mitigation",
+  "playbook_id": "PB-REDIRECT-001",
+  "ai_confidence": 0.95,
+  "steps": [
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Verify the detected Open Redirect at /login. Test if the application accepts URL-encoded carriage-return (%0d) and line-feed (%0a) characters within the redirection parameter to check for HTTP header injection vulnerabilities (KB 7.3.3.1).",
+      "priorityLevel": "MEDIUM",
+      "integration": "browser",
+      "target": "Internal Security Sandbox"
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
+      "message": "Update WAF rules to block external URLs in the 'redirect' parameter for the /login endpoint and filter %0d and %0a characters.",
+      "priorityLevel": "HIGH",
+      "integration": "splunk",
+      "target": "WAF_Controller",
+      "params": {
+        "action": "block_domain",
+        "pattern": "http://attacker.com"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Apply code fix: Use a whitelist for allowed redirection targets or force relative paths. Sanitize input to prevent CRLF injection by stripping %0d and %0a before processing headers. Review JavaScript APIs like window.location.href for client-side redirect security (KB 13.1).",
+      "priorityLevel": "HIGH",
+      "integration": "github",
+      "target": "App_Login_Module",
+      "params": {
+        "fix_type": "input_validation",
+        "language": "python"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "ADMIN",
+      "assignedUser": "c3000001-0000-0000-0000-000000000001",
+      "message": "Review security-relevant configuration settings in the Java environment. Ensure security-constraint and login-config elements are correctly defined to protect administrative resources (KB Table 19-3).",
+      "priorityLevel": "LOW",
+      "integration": "internal_system",
+      "target": "Webserver_Config"
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Notify the CISO of the remediation status and confirm that the open redirect vulnerability has been patched to prevent phishing and session hijacking.",
+      "priorityLevel": "MEDIUM",
+      "integration": "slack",
+      "target": "Security_Leadership_Channel"
+    }
+  ]
+}

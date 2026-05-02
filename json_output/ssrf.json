@@ -1,0 +1,70 @@
+{
+  "source": "AI Analyzer",
+  "severity": "CRITICAL",
+  "title": "Server-Side Request Forgery (SSRF) - Metadata Service Access Detected",
+  "playbook_id": "PB-SSRF-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Identify the request parameter containing the internal metadata URL (169.254.169.254). Check if the application allows specifying alternative ports as per KB 8.6.1.",
+      "priorityLevel": "HIGH",
+      "integration": "splunk",
+      "target": "access_logs",
+      "params": {
+        "query": "index=web_logs \"169.254.169.254\"",
+        "lookback": "1h"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Implement strict input validation on parameters identified. As per KB Hack Steps, ensure the application does not connect to loopback addresses or the internal network. Use the provided Python skill to deploy a regex filter.",
+      "priorityLevel": "CRITICAL",
+      "integration": "github",
+      "target": "production-api-gateway",
+      "params": {
+        "action": "deploy_hotfix",
+        "language": "python",
+        "remediation_type": "whitelist_validation"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "ADMIN",
+      "assignedUser": "c3000001-0000-0000-0000-000000000001",
+      "message": "Verify if the metadata service can be hardened (e.g., transition to IMDSv2) or if outbound network restrictions on the application server can block 169.254.169.254.",
+      "priorityLevel": "HIGH",
+      "integration": "aws_cli",
+      "target": "ec2_instance_config",
+      "params": {
+        "command": "modify-instance-metadata-options",
+        "HttpTokens": "required"
+      }
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Monitor for incoming connections on attacker-controlled servers. Check for delays in response which might indicate timeout due to network restrictions as per KB Section 4.",
+      "priorityLevel": "MEDIUM",
+      "integration": "slack",
+      "target": "incident-response-channel",
+      "params": {
+        "channel": "#ir-alerts-critical"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Review the impact of potential credential exfiltration from the metadata service and approve the incident closure/remediation report.",
+      "priorityLevel": "MEDIUM",
+      "integration": "internal_portal",
+      "target": "compliance_review"
+    }
+  ]
+}

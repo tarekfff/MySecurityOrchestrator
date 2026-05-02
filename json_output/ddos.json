@@ -1,0 +1,71 @@
+{
+  "source": "AI Analyzer",
+  "severity": "CRITICAL",
+  "title": "DDoS Attack Mitigation & Back-End XML/SOAP Endpoint Protection",
+  "playbook_id": "PB-DDOS-XML-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
+      "message": "High traffic spike detected (100,000 RPS). Block the 500 unique IP addresses identified in the security logs at the edge firewall level.",
+      "priorityLevel": "CRITICAL",
+      "integration": "palo_alto_pan_os",
+      "target": "Edge_Firewall_Primary",
+      "params": {
+        "action": "block",
+        "scope": "detected_ips"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Review and harden the /bank/27/Default.aspx endpoint. Based on KB findings, implement input validation to prevent SOAP injection and XXE (XML External Entity) attacks that may be contributing to back-end resource exhaustion.",
+      "priorityLevel": "HIGH",
+      "integration": "custom_script_runner",
+      "target": "Web_App_Backend",
+      "params": {
+        "language": "python",
+        "script_name": "harden_xml_parser.py",
+        "description": "Disable DTDs and external entities in the XML/SOAP processing logic."
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "f7000001-0000-0000-0000-000000000001",
+      "message": "Enable Rate Limiting on the API Gateway specifically for SOAP/XML requests to prevent attackers from cycling through IP/port numbers as described in the SSRF/XXE exploitation context.",
+      "priorityLevel": "HIGH",
+      "integration": "f5_big_ip",
+      "target": "Application_Gateway",
+      "params": {
+        "rate_limit_threshold": "100_rps_per_ip",
+        "endpoint": "/bank/27/Default.aspx"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Approve the activation of the Upstream DDoS Protection Service (e.g., Cloudflare/Akamai) to absorb the 100k RPS load if mitigation steps on-prem fail to stabilize latency.",
+      "priorityLevel": "HIGH",
+      "integration": "slack",
+      "target": "Security_Ops_Channel"
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "LEGAL",
+      "assignedUser": "e5000001-0000-0000-0000-000000000001",
+      "message": "Incident report initiated for a critical availability event. Notify relevant parties regarding potential service interruption and data integrity check for back-end banking components.",
+      "priorityLevel": "MEDIUM",
+      "integration": "external_webhook",
+      "target": "https://legal-compliance.internal/alerts",
+      "params": {
+        "incident_id": "DDoS-2023-001",
+        "status": "In-Progress"
+      }
+    }
+  ]
+}

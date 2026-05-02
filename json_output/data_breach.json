@@ -1,0 +1,92 @@
+{
+  "source": "AI Analyzer",
+  "severity": "CRITICAL",
+  "title": "High Volume Data Exfiltration & Information Disclosure Mitigation",
+  "playbook_id": "PB-EXFIL-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Block the malicious external IP 45.33.12.98 at the perimeter firewall to halt current exfiltration.",
+      "priorityLevel": "CRITICAL",
+      "integration": "firewall",
+      "target": "45.33.12.98",
+      "params": {
+        "action": "block",
+        "direction": "outbound"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Analyze application logs for SQL injection patterns or verbose error messages (ODBC/Java stack traces) that may have disclosed sensitive data, as described in WAHH Chapter 15.",
+      "priorityLevel": "HIGH",
+      "integration": "python_executor",
+      "target": "app_server_logs",
+      "params": {
+        "script_type": "log_parser",
+        "search_pattern": "select.*from.*users|stack_trace|error_description"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000002-0000-0000-0000-000000000002",
+      "message": "Retrieve a list of all files and account numbers accessed by the internal source IP prior to exfiltration to determine breach scope.",
+      "priorityLevel": "HIGH",
+      "integration": "splunk",
+      "target": "siem_index_main",
+      "params": {
+        "query": "search sourcetype=access_logs dest_ip=45.33.12.98 | table uri, client_ip, bytes"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Implement code changes to suppress verbose error messages and disable debug functionality in the production environment to prevent further information disclosure (WAHH p.627).",
+      "priorityLevel": "HIGH",
+      "integration": "github",
+      "target": "web_app_repo",
+      "params": {
+        "action": "commit_mitigation",
+        "description": "Disable customErrors and stack trace output"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Review identified vulnerabilities (Broken Access Control/SQLi) and approve the remediation plan to harden application entry points.",
+      "priorityLevel": "MEDIUM",
+      "integration": "internal_approval_system",
+      "target": "soc_lead_review"
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "LEGAL",
+      "assignedUser": "e5000001-0000-0000-0000-000000000001",
+      "message": "Initiate data breach notification protocols for 5GB exfiltration incident per regulatory requirements.",
+      "priorityLevel": "HIGH",
+      "integration": "legal_notification_api",
+      "target": "https://legal.internal/api/v1/incident-report",
+      "params": {
+        "incident_id": "PB-EXFIL-001",
+        "volume": "5GB",
+        "data_type": "sensitive_user_info"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Final sign-off on incident closure and verification that information disclosure vectors are strictly controlled.",
+      "priorityLevel": "LOW",
+      "integration": "executive_dashboard",
+      "target": "ciso_approval_queue"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "source": "AI Analyzer",
+  "severity": "HIGH",
+  "title": "Reflected Cross-Site Scripting (XSS) in Search Query Parameter",
+  "playbook_id": "PB-XSS-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
+      "message": "Search logs for the specific payload '<script>alert(1)</script>' and variations to identify the scope of the attack and if other users were affected.",
+      "priorityLevel": "HIGH",
+      "integration": "splunk",
+      "target": "search_logs",
+      "params": {
+        "query": "index=web_logs uri_query=\"*script*\" OR uri_query=\"*alert*\"",
+        "earliest_time": "-24h"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Apply the primary remedy: Update the application code to HTML-encode all user-controllable data in the 'q' parameter before it is reflected in the response. Ensure the application explicitly specifies an encoding type (e.g., charset=UTF-8) in the Content-Type header to prevent character set manipulation.",
+      "priorityLevel": "CRITICAL",
+      "integration": "github",
+      "target": "repo_backend_search",
+      "params": {
+        "action": "implement_encoding",
+        "method": "HttpUtility.HtmlEncode"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "f7000001-0000-0000-0000-000000000001",
+      "message": "Configure WAF rules to block common XSS bypass strings identified in the KB, such as script pseudo-protocols, unusual character sets, and nested script tags (e.g., <scr<script>ipt>).",
+      "priorityLevel": "HIGH",
+      "integration": "cloudflare",
+      "target": "waf_rules",
+      "params": {
+        "rule_action": "block",
+        "expression": "http.request.uri.query contains \"script\""
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Review the implemented encoding fix and verify using the standard proof-of-concept string '><script>alert(document.cookie)</script>' to ensure the vulnerability is closed and cannot be bypassed via DOM-based or filter-circumvention techniques.",
+      "priorityLevel": "MEDIUM"
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Notify executive leadership of the incident resolution and initiate a security audit of all reflecting parameters within the application to prevent similar first-order XSS vulnerabilities.",
+      "priorityLevel": "LOW",
+      "integration": "slack",
+      "target": "security_management_channel",
+      "params": {
+        "text": "Incident PB-XSS-001 resolved. Reflected XSS in /search mitigated via HTML encoding."
+      }
+    }
+  ]
+}

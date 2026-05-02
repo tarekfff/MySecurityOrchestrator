@@ -1,0 +1,47 @@
+{
+  "source": "AI Analyzer",
+  "severity": "CRITICAL",
+  "title": "Ransomware Outbreak - FileServer-01 Mass Encryption",
+  "playbook_id": "PB-RANSOM-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
+      "message": "Isolate FileServer-01 from the network using the EDR controller to prevent the spread of .locked encryption.",
+      "priorityLevel": "CRITICAL",
+      "integration": "crowdstrike",
+      "target": "FileServer-01",
+      "params": {
+        "action": "contain"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Review incident logs and determine if the attack vector involved obfuscated bytecode or XSS-based browser exploitation as referenced in the WAHH KB.",
+      "priorityLevel": "HIGH"
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Deploy mitigation script to identify the source process of the encryption. Utilize 'mitigation' and 'python' skills to automate file restoration from immutable backups.",
+      "priorityLevel": "HIGH",
+      "integration": "ansible",
+      "target": "FileServer-01",
+      "params": {
+        "script_path": "/opt/security/restore_fs.py"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Authorize emergency communication plan and evaluate potential data breach liability regarding the encrypted data on FileServer-01.",
+      "priorityLevel": "CRITICAL"
+    }
+  ]
+}

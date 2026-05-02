@@ -1,0 +1,70 @@
+{
+  "source": "AI Analyzer",
+  "severity": "HIGH",
+  "title": "Mitigation of Clickjacking Vulnerability in Payment Checkout",
+  "playbook_id": "PB-CLICKJACKING-001",
+  "ai_confidence": 0.95,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
+      "message": "Verify the missing X-Frame-Options and Content-Security-Policy (CSP) headers on /payments/checkout using an automated scan.",
+      "priorityLevel": "HIGH",
+      "integration": "splunk",
+      "target": "security_scanner_api",
+      "params": {
+        "endpoint": "/payments/checkout",
+        "check": "missing_headers"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Implement X-Frame-Options: SAMEORIGIN and Content-Security-Policy: frame-ancestors 'self' in the web server configuration to prevent UI redressing. As per WAHH guidelines, also ensure no relative URLs are vulnerable to base tag hijacking.",
+      "priorityLevel": "HIGH",
+      "integration": "github",
+      "target": "web_config_repo",
+      "params": {
+        "header_value": "SAMEORIGIN",
+        "csp_policy": "frame-ancestors 'self'"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Review the configuration change for /payments/checkout to ensure it does not break third-party payment integrations.",
+      "priorityLevel": "MEDIUM",
+      "integration": "internal_flow",
+      "target": "workflow_engine"
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "46d87f0d-5cf1-4fd4-9122-4f686fb8840b",
+      "message": "Trigger a re-scan of the production endpoint to confirm the mitigation is active.",
+      "priorityLevel": "LOW",
+      "integration": "custom_webhook",
+      "target": "https://vulnerability-scanner.internal/api/retest",
+      "params": {
+        "target_url": "https://company.com/payments/checkout",
+        "vulnerability_id": "CWE-1027"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Update the security posture report and audit logs to reflect the remediation of the clickjacking vulnerability.",
+      "priorityLevel": "LOW",
+      "integration": "jira",
+      "target": "security_audit_project",
+      "params": {
+        "status": "RESOLVED",
+        "resolution_note": "X-Frame-Options and CSP frame-ancestors headers implemented."
+      }
+    }
+  ]
+}

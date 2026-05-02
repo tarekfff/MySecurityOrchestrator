@@ -1,0 +1,65 @@
+{
+  "source": "AI Analyzer",
+  "severity": "MEDIUM",
+  "title": "Horizontal Privilege Escalation (IDOR) on User Profiles",
+  "playbook_id": "PB-ACCESS-CONTROL-001",
+  "ai_confidence": 0.95,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
+      "message": "Query Splunk for all requests to /user/profile/ from the suspicious session ID to identify the scope of ID probing.",
+      "priorityLevel": "MEDIUM",
+      "integration": "splunk",
+      "target": "access_logs",
+      "params": {
+        "query": "index=web_logs uri_path=\"/user/profile/*\" | stats count by client_ip, uri_path"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Perform code review of the profile controller. Ensure the application validates that the requested ID (5001) belongs to the authenticated user's session context rather than relying on the client-supplied ID.",
+      "priorityLevel": "HIGH",
+      "integration": "github",
+      "target": "web-api-controller",
+      "params": {
+        "action": "security_audit",
+        "focus": "session_validation"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Approve the temporary suspension of User A's account while forensic analysis of horizontal privilege escalation attempts is completed.",
+      "priorityLevel": "MEDIUM",
+      "integration": "active_directory",
+      "target": "user_account_management"
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "f7000001-0000-0000-0000-000000000001",
+      "message": "Deploy a mitigation filter to the WAF to block sequential ID patterns in the /user/profile/ path.",
+      "priorityLevel": "HIGH",
+      "integration": "cloudflare_waf",
+      "target": "firewall_rules_api",
+      "params": {
+        "rule_name": "Block_ID_Scanning",
+        "action": "challenge"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "LEGAL",
+      "assignedUser": "e5000001-0000-0000-0000-000000000001",
+      "message": "Review accessed data logs to determine if Personal Identifiable Information (PII) was exposed to User A, requiring GDPR/regulatory notification.",
+      "priorityLevel": "LOW",
+      "integration": "compliance_manager",
+      "target": "incident_report_service"
+    }
+  ]
+}

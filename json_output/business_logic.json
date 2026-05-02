@@ -1,0 +1,58 @@
+{
+  "source": "AI Analyzer",
+  "severity": "HIGH",
+  "title": "Business Logic Flaw: Negative Price Injection in Checkout",
+  "playbook_id": "PB-BUSLOGIC-001",
+  "ai_confidence": 0.95,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Identify and terminate the session associated with the negative price transaction of -100.0 in the shopping cart module.",
+      "priorityLevel": "HIGH",
+      "integration": "splunk",
+      "target": "Search: index=web_logs | where price < 0",
+      "params": {
+        "action": "terminate_session",
+        "threshold": 0
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Mitigate client-side control bypass. Audit application code for hidden price fields (e.g., <input type='hidden' name='price'>) and move price retrieval to server-side logic as per WAHH Chapter 5.",
+      "priorityLevel": "CRITICAL",
+      "integration": "github",
+      "target": "checkout_logic.py",
+      "params": {
+        "fix_type": "server_side_validation",
+        "validation_rule": "price > 0"
+      }
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Notify the finance department of a potential unauthorized transaction reversal due to business logic manipulation.",
+      "priorityLevel": "MEDIUM",
+      "integration": "slack",
+      "target": "https://hooks.slack.com/services/finance-alerts",
+      "params": {
+        "incident_ref": "PB-BUSLOGIC-001",
+        "impact": "Potential -100.0 credit injection"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Approve a comprehensive security review of all multistage processes to prevent 'forced browsing' or out-of-sequence request submissions.",
+      "priorityLevel": "LOW",
+      "integration": "jira",
+      "target": "SEC-AUDIT-2023",
+      "params": {}
+    }
+  ]
+}

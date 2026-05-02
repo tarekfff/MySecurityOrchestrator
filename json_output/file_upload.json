@@ -1,0 +1,57 @@
+{
+  "source": "AI Analyzer",
+  "severity": "CRITICAL",
+  "title": "Unrestricted File Upload - PHP Web Shell Detection and Remediation",
+  "playbook_id": "PB-UFU-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "c3000001-0000-0000-0000-000000000001",
+      "message": "Immediately isolate and quarantine 'shell.php.jpg' from the web directory. Check for any other files with double extensions or anomalous naming conventions as referenced in WAHH 7.5.3.",
+      "priorityLevel": "CRITICAL"
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Query logs for any execution attempts targeting the uploaded shell. Look for unusual error messages or status codes (304, 500) that might indicate script injection attempts (WAHH 7.6.2).",
+      "priorityLevel": "HIGH",
+      "integration": "splunk",
+      "target": "web_server_logs",
+      "params": {
+        "query": "index=web_logs file='shell.php.jpg' OR status=200"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Remediate the vulnerability in the source code. Implement strict server-side validation that does not rely on client-side checks (WAHH Chapter 19). Replicate validation logic to check for byte patterns and enforce a strict whitelist of extensions, preventing bypasses like Shift-JIS or UTF-8 encoding exploits.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "remediation_focus": "server-side-validation",
+        "kb_reference": "WAHH-10.1.3"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Review the forensics report and the code patch. Verify that the file upload functionality is now restricted to non-executable directories and that least-privilege OS accounts are being used for the application tier (WAHH Mitigations).",
+      "priorityLevel": "MEDIUM"
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "EXEC",
+      "assignedUser": "f6000001-0000-0000-0000-000000000001",
+      "message": "Notify leadership of the incident resolution and the steps taken to harden the shared infrastructure against further command injection or file access flaws.",
+      "priorityLevel": "LOW",
+      "target": "corporate_comms_webhook",
+      "params": {
+        "incident_status": "contained"
+      }
+    }
+  ]
+}

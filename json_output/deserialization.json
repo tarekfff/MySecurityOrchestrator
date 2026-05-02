@@ -1,0 +1,72 @@
+{
+  "source": "AI Analyzer",
+  "severity": "CRITICAL",
+  "title": "Java Insecure Deserialization in Session Cookie",
+  "playbook_id": "PB-EXPLOIT-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Use a local intercepting proxy (Burp Suite) to decode the 'JSESSIONID' cookie starting with 'rO0ABXNyA'. Identify if the serialized object contains user context or logic-controlling parameters as described in WAHH Section 3.3.1.1.",
+      "priorityLevel": "CRITICAL",
+      "integration": "splunk",
+      "target": "security_logs",
+      "params": {
+        "query": "index=web_logs cookie='*rO0ABXNyA*'",
+        "time_range": "last_24h"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Mitigate vulnerability by implementing a Look-ahead ObjectInputStream or switching to a non-binary serialization format (e.g., JSON). Review the Java source code to ensure that m_pageTitle and other variables derived from request parameters are properly validated before use in application responses.",
+      "priorityLevel": "CRITICAL",
+      "integration": "github",
+      "target": "application_source_repo",
+      "params": {
+        "action": "code_review_patch",
+        "focus": "deserialization_logic"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "f7000001-0000-0000-0000-000000000001",
+      "message": "Review 'web.xml' and server configuration. Ensure security-constraints are defined, session-timeout is limited, and HTTP error codes are handled properly via error-page elements to prevent information leakage through stack traces.",
+      "priorityLevel": "HIGH",
+      "integration": "ansible",
+      "target": "web_server_config",
+      "params": {
+        "check_file": "/WEB-INF/web.xml",
+        "search_pattern": "security-constraint"
+      }
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Alert infrastructure teams to investigate if multiple tiers are inadequately segregated. The presence of deserialization vulnerabilities suggests an attacker might escalate privileges or access internal tiers using the same encryption keys/algorithms as mentioned in the WAHH KB.",
+      "priorityLevel": "HIGH",
+      "integration": "slack",
+      "target": "incident_response_channel",
+      "params": {
+        "text": "CRITICAL: Insecure Deserialization detected. Potential for RCE and Tier Escalation."
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Evaluate the risk of historical credential compromise. Review logs for any instances of credentials passed as query string parameters in 302 redirects, which may have been logged in reverse proxy or browser history files as identified in the exploitation context.",
+      "priorityLevel": "MEDIUM",
+      "integration": "jira",
+      "target": "compliance_ticket",
+      "params": {
+        "requirement": "PCI-DSS/Regulatory Audit"
+      }
+    }
+  ]
+}

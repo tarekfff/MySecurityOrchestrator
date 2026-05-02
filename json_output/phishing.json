@@ -1,0 +1,81 @@
+{
+  "source": "AI Analyzer",
+  "severity": "HIGH",
+  "title": "Phishing Incident: Malicious Domain it-support-portal.net Detected",
+  "playbook_id": "PB-PHISH-001",
+  "ai_confidence": 0.95,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Analyze the domain 'it-support-portal.net' for reputation, creation date, and SSL certificate validity as per WAHH phishing vector guidelines.",
+      "priorityLevel": "HIGH",
+      "integration": "virustotal",
+      "target": "it-support-portal.net",
+      "params": {
+        "resource": "it-support-portal.net"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Execute Python script to query proxy and mail logs for any traffic or interactions involving 'it-support-portal.net'.",
+      "priorityLevel": "CRITICAL",
+      "integration": "internal_log_manager",
+      "target": "SIEM_LOGS",
+      "params": {
+        "script_language": "python",
+        "search_query": "domain='it-support-portal.net'"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "f7000001-0000-0000-0000-000000000001",
+      "message": "Block the domain 'it-support-portal.net' at the enterprise firewall and DNS level to prevent further victim interaction.",
+      "priorityLevel": "HIGH",
+      "integration": "palo_alto",
+      "target": "external_firewall",
+      "params": {
+        "action": "block",
+        "domain": "it-support-portal.net"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Approve mandatory password reset for all users identified as having clicked the link or provided credentials in the phishing email.",
+      "priorityLevel": "HIGH",
+      "integration": "slack",
+      "target": "soc_leadership_channel"
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Review Java application source code for 'sendRedirect' and 'addHeader' APIs to ensure no open redirect vulnerabilities were used to facilitate this phishing attack, as identified in WAHH context.",
+      "priorityLevel": "MEDIUM",
+      "integration": "github",
+      "target": "app_source_repo",
+      "params": {
+        "grep_patterns": [
+          "sendRedirect",
+          "setStatus",
+          "addHeader"
+        ]
+      }
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Trigger company-wide security alert notification regarding the 'it-support-portal.net' phishing campaign.",
+      "priorityLevel": "LOW",
+      "integration": "custom_webhook",
+      "target": "internal_comms_portal"
+    }
+  ]
+}

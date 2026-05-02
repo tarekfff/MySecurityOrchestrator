@@ -1,0 +1,69 @@
+{
+  "source": "AI Analyzer",
+  "severity": "HIGH",
+  "title": "Brute Force and Username Enumeration Mitigation",
+  "playbook_id": "PB-AUTH-BRUTE-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Verify the frequency and source of failed login attempts for user 'admin' from IP 203.0.113.42 using SIEM logs.",
+      "priorityLevel": "HIGH",
+      "integration": "splunk",
+      "target": "203.0.113.42",
+      "params": {
+        "query": "index=security sourcetype=access_combined src_ip=203.0.113.42 user=admin status=401"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Block the malicious source IP address 203.0.113.42 at the perimeter firewall.",
+      "priorityLevel": "CRITICAL",
+      "integration": "palo_alto",
+      "target": "203.0.113.42",
+      "params": {
+        "action": "deny",
+        "direction": "inbound"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Deploy a script to analyze if the server returns different responses for valid vs invalid usernames to prevent enumeration as described in KB steps 2-5.",
+      "priorityLevel": "MEDIUM",
+      "integration": "python_executor",
+      "target": "auth-microservice",
+      "params": {
+        "script_name": "check_enumeration_vulnerability.py",
+        "description": "Checks status codes, redirects, and HTML source differences for login attempts."
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "f7000001-0000-0000-0000-000000000001",
+      "message": "Review and enable account lockout policy after 3 failed attempts to prevent automated enumeration as per KB Step 6.",
+      "priorityLevel": "HIGH",
+      "integration": "active_directory",
+      "target": "domain_controller",
+      "params": {
+        "lockout_threshold": 3,
+        "lockout_duration": 30
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "CISO",
+      "assignedUser": "d4000001-0000-0000-0000-000000000001",
+      "message": "Approve the strategic decision to mandate MFA for the 'admin' account and generic administrative accounts.",
+      "priorityLevel": "LOW",
+      "integration": "internal_governance",
+      "target": "policy_engine"
+    }
+  ]
+}

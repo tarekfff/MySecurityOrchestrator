@@ -1,0 +1,67 @@
+{
+  "source": "AI Analyzer",
+  "severity": "HIGH",
+  "title": "Session Fixation Exploitation Detected",
+  "playbook_id": "PB-SESSION-001",
+  "ai_confidence": 0.95,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Revoke and invalidate the session ID 'FIXED_ID_123' immediately in the session manager to prevent unauthorized access.",
+      "priorityLevel": "CRITICAL",
+      "integration": "redis",
+      "target": "session_store",
+      "params": {
+        "action": "revoke_session",
+        "session_id": "FIXED_ID_123"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Modify the authentication logic to ensure the application issues a fresh session token following a successful login (WAHH 5.8.1). Verify that the application does not accept invented tokens provided by the user (WAHH 5.8.3).",
+      "priorityLevel": "HIGH",
+      "integration": "github",
+      "target": "auth-service-repo",
+      "params": {
+        "requirement": "token_regeneration_on_login"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "f7000001-0000-0000-0000-000000000001",
+      "message": "Update web server configuration to set cookie domain and path scope as restrictively as possible. Ensure 'Secure' and 'HttpOnly' flags are applied to all session cookies.",
+      "priorityLevel": "MEDIUM",
+      "integration": "nginx",
+      "target": "production_gateway",
+      "params": {
+        "cookie_flags": "Secure; HttpOnly; SameSite=Strict"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
+      "message": "Scan system logs and diagnostic logs for other instances of session tokens appearing in URLs or plain text logs (WAHH 5.5).",
+      "priorityLevel": "MEDIUM",
+      "integration": "splunk",
+      "target": "application_logs",
+      "params": {
+        "query": "index=web \"jsessionid=\" OR \"ASP.NET_SessionId=\""
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Review the session management life cycle audit and confirm that remediation steps satisfy WAHH 5.6 (mapping tokens to sessions) and 5.7 (session termination).",
+      "priorityLevel": "LOW",
+      "integration": "jira",
+      "target": "security_audit_log"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "source": "AI Analyzer",
+  "severity": "CRITICAL",
+  "title": "OS Command Injection Mitigation - /etc/passwd Leak Attempt",
+  "playbook_id": "PB-RCE-001",
+  "ai_confidence": 0.98,
+  "steps": [
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "assignedUser": "a1000001-0000-0000-0000-000000000001",
+      "message": "Isolate the request logs to identify the vulnerable parameter and source IP for the payload: ; cat /etc/passwd.",
+      "priorityLevel": "CRITICAL",
+      "integration": "splunk",
+      "target": "search_logs",
+      "params": {
+        "query": "index=web_logs payload=\"; cat /etc/passwd\""
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Verify vulnerability by injecting a time-delay command (e.g., ping 127.0.0.1) as suggested in KB mitigation step 6 to confirm if input is dynamically executed.",
+      "priorityLevel": "HIGH",
+      "integration": "python_executor",
+      "target": "web_application_server",
+      "params": {
+        "test_payload": "; ping 127.0.0.1 -c 5"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Perform a code review of the application layer. Search for dangerous functions: system(), exec(), shell_exec(), proc_open(), or the backtick operator where unvalidated user input is passed.",
+      "priorityLevel": "HIGH",
+      "integration": "github",
+      "target": "source_code_repo",
+      "params": {
+        "grep_pattern": "(system|exec|shell_exec|passthru|proc_open|popen)"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "assignedUser": "b2000001-0000-0000-0000-000000000001",
+      "message": "Approve the immediate deployment of a WAF rule to block shell metacharacters and the implementation of a code patch.",
+      "priorityLevel": "HIGH",
+      "integration": "slack",
+      "target": "soc_approvals_channel"
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "f7000001-0000-0000-0000-000000000001",
+      "message": "Configure WAF/Cloudflare to block requests containing shell metacharacters (; | & `) in the identified parameter.",
+      "priorityLevel": "CRITICAL",
+      "integration": "cloudflare",
+      "target": "waf_rules",
+      "params": {
+        "rule_action": "block",
+        "pattern": "[;\\|&`]"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Refactor code to remove direct shell execution. If necessary, use input validation with a strict whitelist of permitted values rather than attempting to strip shell characters which can be bypassed by recursion or encoding.",
+      "priorityLevel": "HIGH",
+      "integration": "git",
+      "target": "vulnerable_branch",
+      "params": {
+        "fix_type": "sanitization_refactor"
+      }
+    }
+  ]
+}
