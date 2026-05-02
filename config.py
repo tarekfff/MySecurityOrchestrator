@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     gemini_api_key: str
     supabase_url: str
     supabase_service_key: str
+    friend_webhook_url: str = ""
 
     pdf_path: str = (
         "The Web Application Hacker's Handbook - Finding and Exploiting Security Flaws, "

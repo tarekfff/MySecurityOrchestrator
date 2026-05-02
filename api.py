@@ -21,6 +21,7 @@ from typing import Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel, Field
+import httpx
 
 from config import settings
 from db import SupabaseDB
@@ -256,8 +257,27 @@ def retrieve(req: RetrieveRequest):
     )
 
 
+# ── Webhook helper ────────────────────────────────────────────────────────────
+
+async def _send_to_friend(workflow: dict):
+    """Sends the generated workflow JSON to the friend's webhook."""
+    if not settings.friend_webhook_url:
+        return
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            print(f"📡 Sending workflow to webhook: {settings.friend_webhook_url}")
+            resp = await client.post(
+                settings.friend_webhook_url, 
+                json=workflow,
+                timeout=10.0
+            )
+            print(f"✅ Webhook sent! Status: {resp.status_code}")
+        except Exception as e:
+            print(f"❌ Webhook failed: {e}")
+
 @app.post("/analyze", response_model=AnalyzeResponse)
-def analyze(incident: dict):
+async def analyze(incident: dict, background_tasks: BackgroundTasks):
     """
     Directly analyze a complex JSON incident log.
     Extracts keywords + topic, retrieves context, and prepares the AI flow.
@@ -344,6 +364,9 @@ def analyze(incident: dict):
         assembled_context=result.assembled_context,
         llm_prompt=llm_prompt,
     )
+
+    if workflow_json:
+        background_tasks.add_task(_send_to_friend, workflow_json)
 
     return AnalyzeResponse(
         incident_type=str(incident_type),
