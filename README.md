@@ -1,9 +1,16 @@
-# Antigravity Security Orchestrator 🛡️
+
 > **AI-Powered Incident Response: From Raw Logs to Automated Mitigation.**
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Gemini](https://img.shields.io/badge/Gemini-AI-blue?style=flat)](https://aistudio.google.com/)
 [![Supabase](https://img.shields.io/badge/Supabase-Database-green?style=flat&logo=supabase)](https://supabase.com/)
+
+---
+
+## ⚙️ Technical Rationale
+
+*   **AI Engine**: We utilize **Google Gemini 1.5 Flash** to leverage its generous **free tier** for high-performance embeddings and workflow generation, ensuring the project remains cost-effective for development and testing.
+*   **Infrastructure**: Currently using Supabase Cloud for rapid prototyping. The system architecture is designed to support **self-hosted Supabase (Docker)** in later production phases for enhanced data sovereignty.
 
 ---
 
