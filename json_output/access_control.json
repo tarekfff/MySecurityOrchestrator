@@ -1,65 +1,93 @@
 {
   "source": "AI Analyzer",
-  "severity": "MEDIUM",
-  "title": "Horizontal Privilege Escalation (IDOR) on User Profiles",
-  "playbook_id": "PB-ACCESS-CONTROL-001",
+  "severity": "CRITICAL",
+  "title": "Access Control Violation (IDOR) on User Profile Endpoint",
+  "playbook_id": "PB-IDOR-001",
+  "playbook_version": "1.0",
   "ai_confidence": 0.95,
   "steps": [
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
-      "message": "Query Splunk for all requests to /user/profile/ from the suspicious session ID to identify the scope of ID probing.",
-      "priorityLevel": "MEDIUM",
-      "integration": "splunk",
-      "target": "access_logs",
+      "message": "Block the attacking IP and the URL pattern '/user/profile/*' in the WAF to prevent further IDOR attempts, as platform-level controls can often allow unauthorized access if misconfigured.",
+      "priorityLevel": "CRITICAL",
+      "integration": "WAF_MGMT",
+      "target": "block_rule",
       "params": {
-        "query": "index=web_logs uri_path=\"/user/profile/*\" | stats count by client_ip, uri_path"
+        "ip_address": "ALERT_SOURCE_IP",
+        "url_pattern": "/user/profile/*",
+        "block_duration_minutes": 60
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Terminate the active session for User A to immediately prevent further unauthorized access attempts using their current session token, in line with preventing replay attacks.",
+      "priorityLevel": "CRITICAL",
+      "integration": "IAM_MGMT",
+      "target": "terminate_session",
+      "params": {
+        "user_id": "USER_A_ID",
+        "session_id": "USER_A_SESSION_ID"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Query SIEM logs for all activity from the attacking IP and User A for the last 24 hours, specifically looking for other IDOR attempts or access to sensitive resources, leveraging application logs as a gold mine of information.",
+      "priorityLevel": "HIGH",
+      "integration": "SPLUNK",
+      "target": "search",
+      "params": {
+        "query": "index=applogs (source_ip=ALERT_SOURCE_IP OR user_id=USER_A_ID) OR (url=/user/profile/* AND NOT user_id=USER_A_ID)",
+        "time_range": "-24h",
+        "index": "web_access_logs"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Execute an automated scan targeting the '/user/profile/{id}' endpoint to programmatically confirm the IDOR vulnerability, verifying that the application fails to properly control access to resources even if identifiers are not easily guessed.",
+      "priorityLevel": "HIGH",
+      "params": {
+        "target_url": "https://example.com/user/profile/{id}",
+        "scan_profile": "IDOR_Check",
+        "vulnerability_type": "access_control_idor"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "message": "Approve the immediate temporary mitigation strategy (e.g., disabling the affected feature or introducing stricter network controls) and the plan for a permanent code fix to enforce programmatic access control decisions at the application layer.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "proposed_action": "Temporary disablement of /user/profile/ endpoint and plan for code fix.",
+        "impact_assessment": "High impact if feature disabled, but critical for containment."
       }
     },
     {
       "type": "SCRIPT",
       "assignedRole": "IT_ADMIN",
       "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Perform code review of the profile controller. Ensure the application validates that the requested ID (5001) belongs to the authenticated user's session context rather than relying on the client-supplied ID.",
-      "priorityLevel": "HIGH",
-      "integration": "github",
-      "target": "web-api-controller",
+      "message": "Deploy the approved code fix that implements programmatic access controls to validate user authorization for all resource access attempts, ensuring that every step of multistage functions are individually confirmed for access controls.",
+      "priorityLevel": "CRITICAL",
       "params": {
-        "action": "security_audit",
-        "focus": "session_validation"
+        "deployment_package": "app_access_control_patch_v1.0",
+        "environment": "production",
+        "version": "1.0.1"
       }
-    },
-    {
-      "type": "APPROVAL",
-      "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Approve the temporary suspension of User A's account while forensic analysis of horizontal privilege escalation attempts is completed.",
-      "priorityLevel": "MEDIUM",
-      "integration": "active_directory",
-      "target": "user_account_management"
     },
     {
       "type": "WEBHOOK",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "f7000001-0000-0000-0000-000000000001",
-      "message": "Deploy a mitigation filter to the WAF to block sequential ID patterns in the /user/profile/ path.",
-      "priorityLevel": "HIGH",
-      "integration": "cloudflare_waf",
-      "target": "firewall_rules_api",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Notify the security team in the incident channel and create a follow-up ticket in Jira for post-incident review, root cause analysis, and re-testing of the access control vulnerability.",
+      "priorityLevel": "MEDIUM",
+      "target": "slack_channel_incident_response",
       "params": {
-        "rule_name": "Block_ID_Scanning",
-        "action": "challenge"
+        "message_text": "IDOR incident on user profile endpoint contained and remediated. Follow-up ticket created.",
+        "ticket_summary": "Post-incident review and re-testing for IDOR vulnerability on /user/profile/",
+        "ticket_description": "Conduct a thorough review of the IDOR incident, perform root cause analysis, and re-test the '/user/profile/{id}' endpoint to confirm the fix."
       }
-    },
-    {
-      "type": "INTEGRATION",
-      "assignedRole": "LEGAL",
-      "assignedUser": "e5000001-0000-0000-0000-000000000001",
-      "message": "Review accessed data logs to determine if Personal Identifiable Information (PII) was exposed to User A, requiring GDPR/regulatory notification.",
-      "priorityLevel": "LOW",
-      "integration": "compliance_manager",
-      "target": "incident_report_service"
     }
   ]
 }

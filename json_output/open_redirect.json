@@ -1,62 +1,80 @@
 {
   "source": "AI Analyzer",
-  "severity": "MEDIUM",
-  "title": "Unvalidated Redirect and HTTP Header Injection Mitigation",
-  "playbook_id": "PB-REDIRECT-001",
-  "ai_confidence": 0.95,
+  "severity": "HIGH",
+  "title": "Unvalidated Open Redirect in Login Redirection Parameter",
+  "playbook_id": "PB-OPENREDIRECT-001",
+  "playbook_version": "1.0",
+  "ai_confidence": 0.9,
   "steps": [
     {
-      "type": "APPROVAL",
+      "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Verify the detected Open Redirect at /login. Test if the application accepts URL-encoded carriage-return (%0d) and line-feed (%0a) characters within the redirection parameter to check for HTTP header injection vulnerabilities (KB 7.3.3.1).",
-      "priorityLevel": "MEDIUM",
-      "integration": "browser",
-      "target": "Internal Security Sandbox"
+      "message": "Block 'http://attacker.com' at the WAF or firewall to prevent further malicious redirects, as per general incident containment principles for identified malicious targets.",
+      "priorityLevel": "CRITICAL",
+      "integration": "WAF",
+      "target": "http://attacker.com",
+      "params": {
+        "action": "block",
+        "reason": "Malicious Open Redirect Target"
+      }
     },
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
-      "message": "Update WAF rules to block external URLs in the 'redirect' parameter for the /login endpoint and filter %0d and %0a characters.",
+      "message": "Query SIEM logs for instances of '/login?redirect=http://attacker.com' or similar unvalidated redirects to assess the scope and impact of the attack, reviewing how user-controllable data is incorporated into the URL to find any bypasses to validation, as outlined in the KB mitigation.",
       "priorityLevel": "HIGH",
-      "integration": "splunk",
-      "target": "WAF_Controller",
+      "integration": "Splunk",
+      "target": "index=web sourcetype=access_logs \"/login?redirect=http://attacker.com*\"",
       "params": {
-        "action": "block_domain",
-        "pattern": "http://attacker.com"
+        "query_timeframe": "-24h",
+        "fields": "src_ip, user, full_url"
       }
     },
     {
       "type": "SCRIPT",
       "assignedRole": "IT_ADMIN",
       "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Apply code fix: Use a whitelist for allowed redirection targets or force relative paths. Sanitize input to prevent CRLF injection by stripping %0d and %0a before processing headers. Review JavaScript APIs like window.location.href for client-side redirect security (KB 13.1).",
+      "message": "Temporarily disable or sanitize the 'redirect' parameter on the '/login' endpoint to prevent further exploitation of the open redirect vulnerability, aligning with the KB's guidance to review how user-controllable data is incorporated and ensure validation exists.",
       "priorityLevel": "HIGH",
-      "integration": "github",
-      "target": "App_Login_Module",
       "params": {
-        "fix_type": "input_validation",
-        "language": "python"
+        "endpoint": "/login",
+        "parameter": "redirect",
+        "action": "disable_temporary_fix_or_sanitize"
       }
     },
     {
       "type": "APPROVAL",
-      "assignedRole": "ADMIN",
-      "assignedUser": "c3000001-0000-0000-0000-000000000001",
-      "message": "Review security-relevant configuration settings in the Java environment. Ensure security-constraint and login-config elements are correctly defined to protect administrative resources (KB Table 19-3).",
-      "priorityLevel": "LOW",
-      "integration": "internal_system",
-      "target": "Webserver_Config"
+      "assignedRole": "SOC_LEAD",
+      "message": "Approve the deployment of a permanent code fix to implement stringent URL validation and whitelisting for all redirect parameters, as described in the KB mitigation to determine how user-controllable data is incorporated and ensure validation.",
+      "priorityLevel": "HIGH",
+      "params": {
+        "fix_details": "Implement URL validation/whitelisting for redirect parameter.",
+        "impact_assessment": "Low production risk."
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "IT_ADMIN",
+      "message": "Create a high-priority ticket in Jira for the development team to implement robust server-side validation and whitelisting for all redirect parameters, specifically addressing the '/login' endpoint's 'redirect' parameter, to prevent recurrence of unvalidated redirects, as the KB stresses the importance of validation.",
+      "priorityLevel": "HIGH",
+      "integration": "Jira",
+      "target": "Project-X",
+      "params": {
+        "issue_type": "Bug",
+        "summary": "Unvalidated Open Redirect in /login endpoint",
+        "description": "Implement URL validation and whitelisting for redirect parameters.",
+        "priority": "High"
+      }
     },
     {
       "type": "WEBHOOK",
-      "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Notify the CISO of the remediation status and confirm that the open redirect vulnerability has been patched to prevent phishing and session hijacking.",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Send a notification to the SOC communications channel summarizing the open redirect incident, immediate containment actions, and status of the permanent fix implementation.",
       "priorityLevel": "MEDIUM",
-      "integration": "slack",
-      "target": "Security_Leadership_Channel"
+      "target": "Slack_SOC_Channel",
+      "params": {
+        "message": "Open Redirect incident on /login endpoint contained. Investigation ongoing, permanent fix initiated."
+      }
     }
   ]
 }

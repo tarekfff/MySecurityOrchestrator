@@ -85,15 +85,19 @@ class GeminiEmbedder:
     # ── generation ────────────────────────────────────────────────────────────
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-    def generate_json(self, prompt: str, model: str = "gemini-3-flash-preview") -> dict:
+    def generate_json(self, prompt: str, model: str = "models/gemini-flash-latest") -> dict:
         """Generate a JSON response from the LLM."""
-        response = self._client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-            ),
-        )
+        try:
+            response = self._client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                ),
+            )
+        except Exception as e:
+            print(f"DEBUG: Gemini generate_content failed: {e}")
+            raise e
         try:
             import json
             return json.loads(response.text)

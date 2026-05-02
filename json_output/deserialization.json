@@ -1,71 +1,65 @@
 {
   "source": "AI Analyzer",
   "severity": "CRITICAL",
-  "title": "Java Insecure Deserialization in Session Cookie",
-  "playbook_id": "PB-EXPLOIT-001",
-  "ai_confidence": 0.98,
+  "title": "Insecure Deserialization Detected in JSESSIONID Cookie",
+  "playbook_id": "PB-DESERIALIZE-001",
+  "playbook_version": "1.0",
+  "ai_confidence": 0.95,
   "steps": [
+    {
+      "type": "SCRIPT",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Block the source IP or detected malicious pattern associated with the 'JSESSIONID' deserialization attempt in the Web Application Firewall (WAF) or network firewall to prevent further exploitation.",
+      "priorityLevel": "CRITICAL",
+      "params": {}
+    },
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Use a local intercepting proxy (Burp Suite) to decode the 'JSESSIONID' cookie starting with 'rO0ABXNyA'. Identify if the serialized object contains user context or logic-controlling parameters as described in WAHH Section 3.3.1.1.",
+      "message": "Query the SIEM to identify the full request context, including source IP, User-Agent, and any subsequent activities related to the 'JSESSIONID' cookie containing the suspicious serialized object. Identify potentially affected hosts or user accounts.",
       "priorityLevel": "CRITICAL",
-      "integration": "splunk",
-      "target": "security_logs",
+      "integration": "Splunk",
+      "target": "search",
       "params": {
-        "query": "index=web_logs cookie='*rO0ABXNyA*'",
-        "time_range": "last_24h"
+        "query": "index=web sourcetype=access_logs \"JSESSIONID=*rO0ABX*\" OR \"cookie=*rO0ABX*\" | table _time, src_ip, user_agent, cookie, uri_path, http_method",
+        "time_range": "-1h"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Isolate the endpoint or server hosting the application that processed the malicious 'JSESSIONID' cookie, if an affected host is identified, to prevent further compromise or lateral movement.",
+      "priorityLevel": "CRITICAL",
+      "integration": "CrowdStrike",
+      "target": "host_isolation",
+      "params": {
+        "host_id": "{{detected_host.id}}",
+        "isolation_type": "full"
       }
     },
     {
       "type": "SCRIPT",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Mitigate vulnerability by implementing a Look-ahead ObjectInputStream or switching to a non-binary serialization format (e.g., JSON). Review the Java source code to ensure that m_pageTitle and other variables derived from request parameters are properly validated before use in application responses.",
-      "priorityLevel": "CRITICAL",
-      "integration": "github",
-      "target": "application_source_repo",
-      "params": {
-        "action": "code_review_patch",
-        "focus": "deserialization_logic"
-      }
-    },
-    {
-      "type": "INTEGRATION",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "f7000001-0000-0000-0000-000000000001",
-      "message": "Review 'web.xml' and server configuration. Ensure security-constraints are defined, session-timeout is limited, and HTTP error codes are handled properly via error-page elements to prevent information leakage through stack traces.",
+      "assignedRole": "ADMIN",
+      "message": "Forcefully terminate all active user sessions for the affected application and invalidate session cookies. If user compromise is suspected based on SIEM analysis, trigger programmatic credential resets for the affected users.",
       "priorityLevel": "HIGH",
-      "integration": "ansible",
-      "target": "web_server_config",
-      "params": {
-        "check_file": "/WEB-INF/web.xml",
-        "search_pattern": "security-constraint"
-      }
-    },
-    {
-      "type": "WEBHOOK",
-      "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Alert infrastructure teams to investigate if multiple tiers are inadequately segregated. The presence of deserialization vulnerabilities suggests an attacker might escalate privileges or access internal tiers using the same encryption keys/algorithms as mentioned in the WAHH KB.",
-      "priorityLevel": "HIGH",
-      "integration": "slack",
-      "target": "incident_response_channel",
-      "params": {
-        "text": "CRITICAL: Insecure Deserialization detected. Potential for RCE and Tier Escalation."
-      }
+      "params": {}
     },
     {
       "type": "APPROVAL",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Evaluate the risk of historical credential compromise. Review logs for any instances of credentials passed as query string parameters in 302 redirects, which may have been logged in reverse proxy or browser history files as identified in the exploitation context.",
-      "priorityLevel": "MEDIUM",
-      "integration": "jira",
-      "target": "compliance_ticket",
+      "assignedRole": "SOC_LEAD",
+      "message": "Approve the long-term remediation strategy for the insecure deserialization vulnerability. This may involve deploying a code patch to sanitize or completely avoid deserializing untrusted 'JSESSIONID' content, or implementing a whitelist for acceptable classes. Consider rollback plans.",
+      "priorityLevel": "HIGH",
+      "params": {}
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Notify the Incident Response team and relevant stakeholders about the deserialization incident, detailing containment actions taken and the proposed remediation plan. Create a high-priority incident ticket for tracking.",
+      "priorityLevel": "CRITICAL",
+      "target": "REPLACE_WITH_YOUR_SLACK_WEBHOOK",
       "params": {
-        "requirement": "PCI-DSS/Regulatory Audit"
+        "channel": "#incident-response",
+        "message_text": "CRITICAL: Insecure Deserialization detected in 'JSESSIONID' cookie. Immediate containment actions are underway. Please refer to the incident ticket for full details and updates."
       }
     }
   ]

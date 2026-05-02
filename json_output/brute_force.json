@@ -1,69 +1,78 @@
 {
   "source": "AI Analyzer",
-  "severity": "HIGH",
-  "title": "Brute Force and Username Enumeration Mitigation",
-  "playbook_id": "PB-AUTH-BRUTE-001",
-  "ai_confidence": 0.98,
+  "severity": "CRITICAL",
+  "title": "Brute Force Attack Detected from 203.0.113.42 targeting 'admin'",
+  "playbook_id": "PB-BRUTEFORCE-001",
+  "playbook_version": "1.0",
+  "ai_confidence": 0.95,
   "steps": [
     {
-      "type": "INTEGRATION",
+      "type": "SCRIPT",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Verify the frequency and source of failed login attempts for user 'admin' from IP 203.0.113.42 using SIEM logs.",
-      "priorityLevel": "HIGH",
-      "integration": "splunk",
-      "target": "203.0.113.42",
+      "message": "Block the source IP 203.0.113.42 in the WAF/firewall to prevent further brute force attempts, as blocking IPs/patterns in a WAF/firewall is a direct mitigation strategy mentioned in the KB.",
+      "priorityLevel": "CRITICAL",
       "params": {
-        "query": "index=security sourcetype=access_combined src_ip=203.0.113.42 user=admin status=401"
+        "ip_address": "203.0.113.42",
+        "action": "block"
       }
     },
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Block the malicious source IP address 203.0.113.42 at the perimeter firewall.",
-      "priorityLevel": "CRITICAL",
-      "integration": "palo_alto",
-      "target": "203.0.113.42",
+      "message": "Query the identity management system or SIEM to verify if user 'admin' is locked out or has been successfully compromised, in line with the KB's recommendation to 'verify whether the application performs any account lockout'.",
+      "priorityLevel": "HIGH",
+      "integration": "IdentityManagement",
+      "target": "user_status",
       "params": {
-        "action": "deny",
-        "direction": "inbound"
+        "username": "admin",
+        "query_type": "account_status"
       }
     },
     {
       "type": "SCRIPT",
-      "assignedRole": "ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Deploy a script to analyze if the server returns different responses for valid vs invalid usernames to prevent enumeration as described in KB steps 2-5.",
-      "priorityLevel": "MEDIUM",
-      "integration": "python_executor",
-      "target": "auth-microservice",
-      "params": {
-        "script_name": "check_enumeration_vulnerability.py",
-        "description": "Checks status codes, redirects, and HTML source differences for login attempts."
-      }
-    },
-    {
-      "type": "APPROVAL",
       "assignedRole": "IT_ADMIN",
-      "assignedUser": "f7000001-0000-0000-0000-000000000001",
-      "message": "Review and enable account lockout policy after 3 failed attempts to prevent automated enumeration as per KB Step 6.",
+      "message": "Force a password reset for the 'admin' account immediately to mitigate the risk of account takeover, aligning with the KB's reference to 'resetting credentials programmatically'.",
       "priorityLevel": "HIGH",
-      "integration": "active_directory",
-      "target": "domain_controller",
       "params": {
-        "lockout_threshold": 3,
-        "lockout_duration": 30
+        "username": "admin",
+        "action": "force_password_reset"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Analyze application login logs in the SIEM for 'obvious or subtle differences in the server\u2019s responses' or patterns that signify valid usernames, indicating potential username enumeration as described in the KB (point 3 & 5 of HACK STEPS).",
+      "priorityLevel": "HIGH",
+      "integration": "SIEM",
+      "target": "application_login_logs",
+      "params": {
+        "source_ip": "203.0.113.42",
+        "username": "admin",
+        "time_window": "1h",
+        "query": "failed_login_responses_analysis"
       }
     },
     {
       "type": "APPROVAL",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Approve the strategic decision to mandate MFA for the 'admin' account and generic administrative accounts.",
-      "priorityLevel": "LOW",
-      "integration": "internal_governance",
-      "target": "policy_engine"
+      "assignedRole": "SOC_LEAD",
+      "message": "Approve a review of the application's login mechanism and password policy for username enumeration vulnerabilities and weak password rules, as highlighted in KB points 5 and 6. Authorize the development and deployment of a patch or configuration change.",
+      "priorityLevel": "HIGH",
+      "params": {
+        "vulnerability_type": "username_enumeration_and_weak_passwords",
+        "remediation_action": "application_patch_configuration_change"
+      }
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Create a High-priority incident ticket in the ticketing system and send a notification to the SOC general channel, summarizing the brute force attack and initial containment actions.",
+      "priorityLevel": "HIGH",
+      "target": "Slack_SOC_Channel",
+      "params": {
+        "incident_type": "Brute Force",
+        "severity": "High",
+        "description": "Brute Force Attack targeting 'admin' from 203.0.113.42, initial containment and remediation actions initiated. Check ticketing system for details."
+      }
     }
   ]
 }

@@ -1,67 +1,76 @@
 {
   "source": "AI Analyzer",
   "severity": "HIGH",
-  "title": "Session Fixation Exploitation Detected",
-  "playbook_id": "PB-SESSION-001",
+  "title": "Session Fixation Vulnerability Detected and Exploited",
+  "playbook_id": "PB-SESSIONFIX-001",
+  "playbook_version": "1.0",
   "ai_confidence": 0.95,
   "steps": [
     {
-      "type": "INTEGRATION",
+      "type": "SCRIPT",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Revoke and invalidate the session ID 'FIXED_ID_123' immediately in the session manager to prevent unauthorized access.",
+      "message": "Immediately invalidate the identified session ID 'FIXED_ID_123' to prevent further unauthorized use, as the application should not accept arbitrary session tokens it did not issue.",
       "priorityLevel": "CRITICAL",
-      "integration": "redis",
-      "target": "session_store",
-      "params": {
-        "action": "revoke_session",
-        "session_id": "FIXED_ID_123"
-      }
-    },
-    {
-      "type": "SCRIPT",
-      "assignedRole": "ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Modify the authentication logic to ensure the application issues a fresh session token following a successful login (WAHH 5.8.1). Verify that the application does not accept invented tokens provided by the user (WAHH 5.8.3).",
-      "priorityLevel": "HIGH",
-      "integration": "github",
-      "target": "auth-service-repo",
-      "params": {
-        "requirement": "token_regeneration_on_login"
-      }
+      "params": {}
     },
     {
       "type": "INTEGRATION",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "f7000001-0000-0000-0000-000000000001",
-      "message": "Update web server configuration to set cookie domain and path scope as restrictively as possible. Ensure 'Secure' and 'HttpOnly' flags are applied to all session cookies.",
-      "priorityLevel": "MEDIUM",
-      "integration": "nginx",
-      "target": "production_gateway",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Query the SIEM for all activity related to 'session_id: FIXED_ID_123' and identify if any sensitive actions were performed or if multiple valid tokens are concurrently assigned to the same user account, indicating a compromise.",
+      "priorityLevel": "HIGH",
+      "integration": "Splunk",
+      "target": "index=web_logs session_id=\"FIXED_ID_123\" OR (user=* AND session_count>1)",
       "params": {
-        "cookie_flags": "Secure; HttpOnly; SameSite=Strict"
+        "query": "index=web_logs session_id=\"FIXED_ID_123\" OR (user=* AND session_count>1)"
       }
     },
     {
       "type": "SCRIPT",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
-      "message": "Scan system logs and diagnostic logs for other instances of session tokens appearing in URLs or plain text logs (WAHH 5.5).",
-      "priorityLevel": "MEDIUM",
-      "integration": "splunk",
-      "target": "application_logs",
+      "message": "As a precautionary measure against potential further session hijacking, terminate all active user sessions for the affected application to ensure no other static or fixed tokens remain active. This aligns with canceling invalid tokens.",
+      "priorityLevel": "HIGH",
+      "params": {}
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Create a high-priority vulnerability management ticket for the development team to implement fresh session token issuance upon user authentication and when transitioning from an anonymous to an identified state, as applications are vulnerable to session fixation if they do not issue a fresh token following a successful login.",
+      "priorityLevel": "HIGH",
+      "integration": "Jira",
+      "target": "VULNMGMT",
       "params": {
-        "query": "index=web \"jsessionid=\" OR \"ASP.NET_SessionId=\""
+        "summary": "Session Fixation Vulnerability in [Application Name]",
+        "description": "Application accepts user-provided session IDs and does not regenerate tokens upon authentication or anonymous to authenticated state transition. This allows session fixation attacks and compromises.",
+        "priority": "Highest",
+        "assignee": "DevTeamLead"
       }
     },
     {
       "type": "APPROVAL",
       "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Review the session management life cycle audit and confirm that remediation steps satisfy WAHH 5.6 (mapping tokens to sessions) and 5.7 (session termination).",
-      "priorityLevel": "LOW",
-      "integration": "jira",
-      "target": "security_audit_log"
+      "message": "Review the proposed code fix for session token regeneration and authorize its deployment to the production environment. This is a critical change to core session management.",
+      "priorityLevel": "CRITICAL",
+      "params": {}
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Deploy the updated application code that ensures fresh session tokens are issued upon successful login and user state transitions (anonymous to authenticated) to prevent session fixation.",
+      "priorityLevel": "HIGH",
+      "params": {}
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_LEAD",
+      "message": "Send an incident update to the #security-incidents channel and close the incident, confirming that the session fixation vulnerability has been remediated and verified.",
+      "priorityLevel": "MEDIUM",
+      "target": "#security-incidents",
+      "params": {
+        "status": "Closed",
+        "incident_id": "INC-SESSIONFIX-001",
+        "resolution": "Session fixation vulnerability patched, token regeneration implemented."
+      }
     }
   ]
 }

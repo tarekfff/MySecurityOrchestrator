@@ -354,7 +354,9 @@ async def analyze(incident: dict, background_tasks: BackgroundTasks):
     try:
         workflow_json = embedder.generate_json(workflow_prompt)
     except Exception as e:
+        import traceback
         print(f"Workflow generation failed: {e}")
+        traceback.print_exc()
 
     ret_resp = RetrieveResponse(
         query=result.query,

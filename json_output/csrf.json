@@ -1,74 +1,77 @@
 {
   "source": "AI Analyzer",
   "severity": "HIGH",
-  "title": "CSRF Protection Bypass on Sensitive Endpoint",
+  "title": "CSRF Attack Detected on User Email Update API",
   "playbook_id": "PB-CSRF-001",
-  "ai_confidence": 0.98,
+  "playbook_version": "1.0",
+  "ai_confidence": 0.9,
   "steps": [
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Analyze Splunk logs for the '/api/v1/user/update_email' endpoint to identify requests with missing or invalid anti-CSRF tokens and correlate with user session IDs.",
-      "priorityLevel": "HIGH",
-      "integration": "splunk",
-      "target": "security_logs_index",
-      "params": {
-        "endpoint": "/api/v1/user/update_email",
-        "search_query": "status=200 AND NOT csrf_token_valid"
-      }
-    },
-    {
-      "type": "SCRIPT",
-      "assignedRole": "ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Implement cryptographically secure, per-session anti-CSRF tokens for the vulnerable endpoint. Ensure tokens are validated server-side and not transmitted via URL query strings to prevent CSS-based enumeration or Referer leakage.",
+      "message": "Proactively block the observed source IP address(es) and request patterns associated with invalid anti-CSRF tokens in the WAF, as the application may defensively terminate user sessions for too many invalid tokens, thereby stalling the attack.",
       "priorityLevel": "CRITICAL",
-      "integration": "github",
-      "target": "application-source-code",
+      "integration": "WAF",
+      "target": "WAF_Policy_CSRF_Block",
       "params": {
-        "mitigation_strategy": "synchronizer_token_pattern",
-        "affected_path": "/api/v1/user/update_email"
+        "ip_address": "{{source_ip}}",
+        "request_pattern": "{{request_pattern}}",
+        "block_duration_minutes": 1440
       }
     },
     {
       "type": "SCRIPT",
-      "assignedRole": "ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Apply UI Redress protection by implementing 'X-Frame-Options: SAMEORIGIN' or a Content Security Policy (CSP) with 'frame-ancestors' to prevent clickjacking attacks that bypass CSRF defenses.",
-      "priorityLevel": "HIGH",
-      "integration": "nginx",
-      "target": "web_server_config"
+      "assignedRole": "SOC_ANALYST",
+      "message": "Programmatically invalidate the session of the user(s) targeted by the CSRF attack on '/api/v1/user/update_email' to prevent further unauthorized actions, aligning with the KB's mention of defensively terminating sessions upon invalid token receipt.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "user_id": "{{affected_user_id}}",
+        "session_id": "{{affected_session_id}}"
+      }
     },
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000002-0000-0000-0000-000000000002",
-      "message": "Perform a scan for Reflected and Stored XSS vulnerabilities on the application. Per the KB, XSS can be leveraged to read anti-CSRF tokens and execute requests on behalf of users.",
-      "priorityLevel": "MEDIUM",
-      "integration": "burp_suite",
-      "target": "api_v1_scanner",
+      "message": "Query the SIEM for any co-occurring or recently discovered XSS vulnerabilities, particularly stored XSS flaws within the defended functionality or reflected XSS flaws in related functions, as these can be exploited to defeat anti-CSRF defenses.",
+      "priorityLevel": "HIGH",
+      "integration": "SIEM",
+      "target": "splunk_security_logs",
       "params": {
-        "scan_type": "vulnerability_audit"
+        "query": "index=web_app_logs (vulnerability=XSS OR vulnerability=CSRF) host={{affected_host}} sourcetype=access_combined time_range=\"-24h\""
       }
     },
     {
       "type": "APPROVAL",
       "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Review and approve the updated session handling rules and token validation logic before deployment to production.",
+      "message": "Authorize a thorough review of the application's anti-CSRF token implementation for the '/api/v1/user/update_email' endpoint. Verify if tokens are correctly tied to the user's session and if both cookie and request parameter values are robustly compared to prevent bypasses, as per KB mitigation guidance.",
       "priorityLevel": "HIGH",
-      "integration": "jira",
-      "target": "security_review_board"
+      "params": {}
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Upon approval, deploy a hotfix to strengthen the anti-CSRF token validation logic, ensuring proper synchronization and validation of tokens across both cookie and request parameters, and addressing any identified XSS bypass vectors, as this is a key mitigation from the KB.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "patch_id": "CSRF_PATCH_001",
+        "environment": "production",
+        "code_repo": "https://github.com/example/webapp.git",
+        "branch": "hotfix-csrf-{{timestamp}}"
+      }
     },
     {
       "type": "WEBHOOK",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Notify executive leadership of the vulnerability remediation on the high-risk email update endpoint.",
-      "priorityLevel": "LOW",
-      "integration": "slack",
-      "target": "ciso_alerts_channel"
+      "assignedRole": "ADMIN",
+      "message": "Send a critical alert to the #security-incidents Slack channel and create a high-priority incident ticket in Jira for post-incident review and to track continuous monitoring of the '/api/v1/user/update_email' endpoint.",
+      "priorityLevel": "MEDIUM",
+      "target": "Slack_Security_Channel",
+      "params": {
+        "channel": "#security-incidents",
+        "message": "CSRF incident on /api/v1/user/update_email mitigated. Review and continuous monitoring required. Jira ticket created: {{jira_ticket_link}}",
+        "jira_summary": "Post-incident review and monitoring for CSRF on /api/v1/user/update_email",
+        "jira_priority": "High"
+      }
     }
   ]
 }

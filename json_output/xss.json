@@ -1,66 +1,83 @@
 {
   "source": "AI Analyzer",
   "severity": "HIGH",
-  "title": "Reflected Cross-Site Scripting (XSS) in Search Query Parameter",
+  "title": "Reflected XSS Detected via Search Query Parameter",
   "playbook_id": "PB-XSS-001",
-  "ai_confidence": 0.98,
+  "playbook_version": "1.0",
+  "ai_confidence": 0.95,
   "steps": [
+    {
+      "type": "SCRIPT",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Block the detected XSS payload \"<script>alert(1)</script>\" and common XSS patterns in the WAF, as applications are certainly vulnerable \"unless \ufb01lters are in place elsewhere that block requests containing XSS exploits within the query itself has speci\ufb01ed.\"",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "action": "block",
+        "payload": "<script>alert(1)</script>",
+        "pattern_type": "xss_patterns",
+        "duration": "2h"
+      }
+    },
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
-      "message": "Search logs for the specific payload '<script>alert(1)</script>' and variations to identify the scope of the attack and if other users were affected.",
+      "message": "Query SIEM/log aggregation tools for additional instances of the identified XSS payload \"<script>alert(1)</script>\" or variations (e.g., \"%3e%3cscript%3ealert(document.cookie)%3c/script%3e\", \"<ScRiPt>alert(document.cookie)</ScRiPt>\") across all URL parameters, per the basic approach of \"monitoring responses for the appearance of this same string\" to identify the full scope.",
       "priorityLevel": "HIGH",
-      "integration": "splunk",
+      "integration": "Splunk",
       "target": "search_logs",
       "params": {
-        "query": "index=web_logs uri_query=\"*script*\" OR uri_query=\"*alert*\"",
-        "earliest_time": "-24h"
-      }
-    },
-    {
-      "type": "SCRIPT",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Apply the primary remedy: Update the application code to HTML-encode all user-controllable data in the 'q' parameter before it is reflected in the response. Ensure the application explicitly specifies an encoding type (e.g., charset=UTF-8) in the Content-Type header to prevent character set manipulation.",
-      "priorityLevel": "CRITICAL",
-      "integration": "github",
-      "target": "repo_backend_search",
-      "params": {
-        "action": "implement_encoding",
-        "method": "HttpUtility.HtmlEncode"
+        "query": "index=web_logs (q=\"<script>alert(1)</script>\" OR q=\"%3e%3cscript%3ealert(document.cookie)%3c/script%3e\" OR q=\"<ScRiPt>alert(document.cookie)</ScRiPt>\") OR (message=\"<script>alert(1)</script>\" OR message=\"%3e%3cscript%3ealert(document.cookie)%3c/script%3e\" OR message=\"<ScRiPt>alert(document.cookie)</ScRiPt>\")",
+        "timeframe": "-24h"
       }
     },
     {
       "type": "INTEGRATION",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "f7000001-0000-0000-0000-000000000001",
-      "message": "Configure WAF rules to block common XSS bypass strings identified in the KB, such as script pseudo-protocols, unusual character sets, and nested script tags (e.g., <scr<script>ipt>).",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Isolate the affected server/application instance if direct compromise is suspected, and perform an immediate scan to \"perform a comprehensive test of the application to locate as many individual mated and produces minimal false positives\" vulnerabilities.",
       "priorityLevel": "HIGH",
-      "integration": "cloudflare",
-      "target": "waf_rules",
+      "integration": "CrowdStrike",
+      "target": "host_isolation",
       "params": {
-        "rule_action": "block",
-        "expression": "http.request.uri.query contains \"script\""
+        "hostname": "example-web-server-01",
+        "action": "isolate",
+        "scan_type": "full"
       }
     },
     {
       "type": "APPROVAL",
       "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Review the implemented encoding fix and verify using the standard proof-of-concept string '><script>alert(document.cookie)</script>' to ensure the vulnerability is closed and cannot be bypassed via DOM-based or filter-circumvention techniques.",
-      "priorityLevel": "MEDIUM"
+      "message": "Review and approve temporary application-level mitigation, such as disabling the vulnerable 'q' parameter or implementing stricter input sanitization rules on the '/search' endpoint, recognizing that \"Many applications implement rudimentary blacklist-based \ufb01 lters\" which are a necessary immediate step.",
+      "priorityLevel": "HIGH",
+      "params": {
+        "action_required": "temporary_mitigation",
+        "details": "Disable or apply aggressive sanitization to 'q' parameter on /search endpoint."
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Create a high-priority ticket for the development team to implement proper output encoding for all user-supplied input that is reflected in HTML responses, as \"This behavior of taking user-supplied input and inserting it into the HTML of the server\u2019s response is one of the signatures of re\ufb02ected XSS vulnerabilities,\" and direct sanitization attempts might \"break the application by encoding the HTML.\"",
+      "priorityLevel": "HIGH",
+      "integration": "Jira",
+      "target": "project_id/tickets",
+      "params": {
+        "summary": "High: Reflected XSS in Search Query Parameter",
+        "description": "A reflected XSS vulnerability was found in the search functionality. User input in the 'q' parameter is directly reflected in the HTML response without proper encoding. Implement robust output encoding for all dynamic content.",
+        "assignee": "DevTeamLead",
+        "issue_type": "Bug",
+        "priority": "Highest"
+      }
     },
     {
       "type": "WEBHOOK",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Notify executive leadership of the incident resolution and initiate a security audit of all reflecting parameters within the application to prevent similar first-order XSS vulnerabilities.",
-      "priorityLevel": "LOW",
-      "integration": "slack",
-      "target": "security_management_channel",
+      "assignedRole": "ADMIN",
+      "message": "Notify relevant stakeholders in the incident response channel about the confirmed XSS vulnerability, detailing immediate containment actions and ongoing remediation efforts.",
+      "priorityLevel": "MEDIUM",
+      "target": "slack_incident_response_channel",
       "params": {
-        "text": "Incident PB-XSS-001 resolved. Reflected XSS in /search mitigated via HTML encoding."
+        "message_text": "\ud83d\udea8 Incident Alert: Reflected XSS detected in search functionality (example.com/search). Immediate WAF blocks implemented. Investigation ongoing, dev ticket created. Severity: HIGH.",
+        "incident_id": "INC-XSS-2024-001"
       }
     }
   ]

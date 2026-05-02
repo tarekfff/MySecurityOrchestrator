@@ -1,82 +1,93 @@
 {
   "source": "AI Analyzer",
   "severity": "CRITICAL",
-  "title": "SQL Injection Detected on Login Interface",
+  "title": "SQL Injection Detected in Login Form with Data Returned",
   "playbook_id": "PB-SQLI-001",
+  "playbook_version": "1.0",
   "ai_confidence": 0.98,
   "steps": [
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Identify and block the source IP address attempting the 'OR 1=1' injection in the WAF/SIEM.",
+      "message": "Block the source IP address identified in the alert at the WAF/firewall as a critical containment measure against SQL injection attacks.",
       "priorityLevel": "CRITICAL",
-      "integration": "splunk",
-      "target": "Network Firewall",
+      "integration": "WAF",
+      "target": "security_policy",
       "params": {
-        "action": "block",
-        "indicator": "src_ip"
+        "ip_address": "{{alert.source_ip}}",
+        "action": "block_permanent"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Isolate the affected application server where the SQL Injection occurred using the EDR to prevent further exploitation and data exfiltration, given the serious nature of this vulnerability.",
+      "priorityLevel": "CRITICAL",
+      "integration": "CrowdStrike",
+      "target": "host_isolation",
+      "params": {
+        "hostname": "{{alert.affected_host}}",
+        "action": "isolate"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Query the SIEM for full logs related to the detected SQL injection, including URL parameters, POST data, and HTTP headers, to identify the full extent of the crafted input and potential data exfiltration. (KB: 'probe every such item', 'extract arbitrary data')",
+      "priorityLevel": "HIGH",
+      "integration": "Splunk",
+      "target": "search",
+      "params": {
+        "query": "index=weblogs sourcetype=access_combined_w_vhost uri_path=\"/login*\" ('{{data.dstuser}}' OR 'OR 1=1' OR 'OR a=a' OR 'UNION SELECT*') client_ip=\"{{alert.source_ip}}\" | fields _time, client_ip, user_agent, uri_path, http_method, request_payload, http_referer",
+        "time_range": "24h"
       }
     },
     {
       "type": "SCRIPT",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "f7000001-0000-0000-0000-000000000001",
-      "message": "Perform an immediate full database backup as per KB guidance before probing or remediation to prevent data loss or corruption during the incident response.",
+      "assignedRole": "ADMIN",
+      "message": "Initiate an emergency backup of the database connected to the compromised application to safeguard data before further remediation, as strongly encouraged for SQL injection flaws. (KB: 'perform a full database backup')",
       "priorityLevel": "HIGH",
-      "integration": "db_manager",
-      "target": "Production Database",
       "params": {
-        "command": "BACKUP DATABASE [ApplicationDB] TO DISK = 'N:\\Backups\\PreRemediation.bak'"
+        "database_name": "{{alert.database_name}}",
+        "backup_type": "full",
+        "target_location": "secure_cold_storage"
       }
     },
     {
       "type": "APPROVAL",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Approve temporary suspension of the user registration and login modules to prevent further second-order SQL injection exploitation.",
-      "priorityLevel": "HIGH",
-      "integration": "workflow_engine",
-      "target": "Executive Management",
+      "assignedRole": "SOC_LEAD",
+      "message": "Review the SIEM data and approve the application of a temporary WAF rule to specifically block the identified SQL injection pattern (e.g., '{{data.dstuser}}') or the disablement of the vulnerable login endpoint to immediately mitigate the ongoing exploitation. (KB: 'block SQL injection attacks')",
+      "priorityLevel": "CRITICAL",
       "params": {
-        "scope": "Login/Registration Endpoints"
+        "mitigation_options": [
+          "apply_waf_rule",
+          "disable_endpoint"
+        ]
       }
     },
     {
       "type": "SCRIPT",
       "assignedRole": "IT_ADMIN",
       "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Mitigate vulnerability by replacing dynamic SQL with Prepared Statements (Parameterized Queries). Escaping single quotes is insufficient due to the risk of second-order attacks mentioned in the KB.",
+      "message": "Deploy an emergency patch to the application's login form to implement proper input validation and escape single quotation marks within string-based user input, or enforce a length limiter to prevent further SQL injection attacks. (KB: 'escaping any single quotation marks', 'The length limiter was applied')",
       "priorityLevel": "CRITICAL",
-      "integration": "git_repository",
-      "target": "Auth Module Source Code",
       "params": {
-        "remediation_type": "parameterization",
-        "language": "python"
+        "application_name": "LoginWebApp",
+        "component": "LoginHandler",
+        "patch_id": "SQLI-FIX-20231027"
       }
     },
     {
       "type": "WEBHOOK",
-      "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Conduct a scan for second-order SQL injection payloads stored in the 'users' table, specifically looking for malicious strings in usernames used for the password-change exploit.",
-      "priorityLevel": "MEDIUM",
-      "integration": "tenable_io",
-      "target": "Internal Database Scanner",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Send a critical incident notification to the #security-alerts Slack channel and create a high-priority incident ticket in Jira for post-incident review and permanent solution tracking.",
+      "priorityLevel": "HIGH",
+      "target": "slack_jira_integration",
       "params": {
-        "search_term": "' OR 1="
-      }
-    },
-    {
-      "type": "APPROVAL",
-      "assignedRole": "LEGAL",
-      "assignedUser": "e5000001-0000-0000-0000-000000000001",
-      "message": "Review database logs for error messages like '80040e07' or 'ODBC SQL Server Driver' to determine if password or sensitive data was disclosed via error-based injection.",
-      "priorityLevel": "MEDIUM",
-      "integration": "compliance_portal",
-      "target": "Data Privacy Office",
-      "params": {
-        "check": "Data Breach Notification"
+        "slack_channel": "#security-alerts",
+        "jira_project": "INCIDENT",
+        "summary": "CRITICAL: SQL Injection Detected in Login Form with Data Return",
+        "description": "SQL Injection ('{{data.dstuser}}') detected and exploited in the login form, with evidence of data returned. Initial containment and investigation actions have been taken. Further analysis and permanent fix required. See playbook PB-SQLI-001 for details."
       }
     }
   ]

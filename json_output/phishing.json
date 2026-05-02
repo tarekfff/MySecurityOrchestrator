@@ -1,81 +1,92 @@
 {
   "source": "AI Analyzer",
-  "severity": "HIGH",
-  "title": "Phishing Incident: Malicious Domain it-support-portal.net Detected",
-  "playbook_id": "PB-PHISH-001",
+  "severity": "CRITICAL",
+  "title": "Phishing Attack Detected: Suspicious Password Reset Request",
+  "playbook_id": "PB-PHISHING-001",
+  "playbook_version": "1.0",
   "ai_confidence": 0.95,
   "steps": [
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Analyze the domain 'it-support-portal.net' for reputation, creation date, and SSL certificate validity as per WAHH phishing vector guidelines.",
-      "priorityLevel": "HIGH",
-      "integration": "virustotal",
-      "target": "it-support-portal.net",
-      "params": {
-        "resource": "it-support-portal.net"
-      }
-    },
-    {
-      "type": "SCRIPT",
-      "assignedRole": "ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Execute Python script to query proxy and mail logs for any traffic or interactions involving 'it-support-portal.net'.",
+      "message": "Block the malicious domain 'it-support-portal.net' at the WAF/firewall level based on the phishing alert to prevent further access to the illegitimate site, as phishing websites hosted on different domains are designed to persuade victims.",
       "priorityLevel": "CRITICAL",
-      "integration": "internal_log_manager",
-      "target": "SIEM_LOGS",
+      "integration": "WAF",
+      "target": "firewall_rule",
       "params": {
-        "script_language": "python",
-        "search_query": "domain='it-support-portal.net'"
+        "action": "block",
+        "source_type": "domain",
+        "value": "it-support-portal.net",
+        "reason": "Phishing_Attempt"
       }
     },
     {
       "type": "INTEGRATION",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "f7000001-0000-0000-0000-000000000001",
-      "message": "Block the domain 'it-support-portal.net' at the enterprise firewall and DNS level to prevent further victim interaction.",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Query external threat intelligence platforms like VirusTotal for 'it-support-portal.net' to gather additional context and known malicious indicators related to phishing attacks.",
       "priorityLevel": "HIGH",
-      "integration": "palo_alto",
-      "target": "external_firewall",
+      "integration": "VirusTotal",
+      "target": "domain_lookup",
       "params": {
-        "action": "block",
-        "domain": "it-support-portal.net"
+        "query": "it-support-portal.net"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Search email logs in the Email Security Gateway for any other emails originating from or containing URLs from 'it-support-portal.net' to identify other potential victims of this phishing campaign.",
+      "priorityLevel": "HIGH",
+      "integration": "EmailSecurityGateway",
+      "target": "email_logs",
+      "params": {
+        "query": "domain:it-support-portal.net OR url:*it-support-portal.net*",
+        "timeframe": "24h"
       }
     },
     {
       "type": "APPROVAL",
       "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Approve mandatory password reset for all users identified as having clicked the link or provided credentials in the phishing email.",
-      "priorityLevel": "HIGH",
-      "integration": "slack",
-      "target": "soc_leadership_channel"
+      "message": "Approve forced password resets for any users identified as having potentially compromised credentials due to interacting with the phishing domain 'it-support-portal.net'. This is a high-impact action to prevent account takeover.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "approval_reason": "Prevent_Account_Takeover",
+        "affected_users": "[LIST_OF_COMPROMISED_USERS]"
+      }
     },
     {
       "type": "SCRIPT",
-      "assignedRole": "ADMIN",
+      "assignedRole": "IT_ADMIN",
       "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Review Java application source code for 'sendRedirect' and 'addHeader' APIs to ensure no open redirect vulnerabilities were used to facilitate this phishing attack, as identified in WAHH context.",
-      "priorityLevel": "MEDIUM",
-      "integration": "github",
-      "target": "app_source_repo",
+      "message": "Execute script to force password resets for all identified compromised accounts, as approved by the SOC_LEAD, to mitigate the impact of the phishing attack.",
+      "priorityLevel": "CRITICAL",
       "params": {
-        "grep_patterns": [
-          "sendRedirect",
-          "setStatus",
-          "addHeader"
-        ]
+        "script_name": "force_password_reset.py",
+        "user_list": "[LIST_OF_COMPROMISED_USERS]"
       }
     },
     {
       "type": "WEBHOOK",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Trigger company-wide security alert notification regarding the 'it-support-portal.net' phishing campaign.",
+      "assignedRole": "ADMIN",
+      "message": "Disseminate a security awareness alert to relevant internal communication channels regarding the phishing attempt involving 'it-support-portal.net' and remind users of best practices against phishing attacks.",
+      "priorityLevel": "MEDIUM",
+      "target": "#security_awareness_announcements",
+      "params": {
+        "message": "URGENT: Phishing Alert! A suspicious email from 'it-support-portal.net' requesting password resets has been detected. DO NOT click links or enter credentials. Report any similar emails.",
+        "type": "phishing_alert"
+      }
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Create a formal incident ticket in the ticketing system for the phishing attack (Phishing from 'it-support-portal.net') and document all containment and remediation steps taken, referencing knowledge base articles on 'phishing attacks'.",
       "priorityLevel": "LOW",
-      "integration": "custom_webhook",
-      "target": "internal_comms_portal"
+      "target": "ServiceNow_Incident",
+      "params": {
+        "incident_type": "Phishing",
+        "description": "User reported suspicious email from 'it-support-portal.net' requesting password reset. Domain blocked, TI queried, email logs scanned, password resets initiated. See attached for details.",
+        "status": "New",
+        "severity": "CRITICAL"
+      }
     }
   ]
 }

@@ -1,58 +1,95 @@
 {
   "source": "AI Analyzer",
-  "severity": "HIGH",
-  "title": "Business Logic Flaw: Negative Price Injection in Checkout",
-  "playbook_id": "PB-BUSLOGIC-001",
+  "severity": "CRITICAL",
+  "title": "Business Logic Flaw: Negative Price Manipulation in Checkout",
+  "playbook_id": "PB-BLF-001",
+  "playbook_version": "1.0",
   "ai_confidence": 0.95,
   "steps": [
     {
+      "type": "SCRIPT",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Implement immediate WAF rules to block requests containing negative values for price parameters in the checkout flow to prevent further exploitation, as this represents a critical security function within the application that requires resilience to unexpected input.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "parameter_name": "price",
+        "value_condition": "<0",
+        "action": "block_request",
+        "target_endpoint": "/checkout*"
+      }
+    },
+    {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Identify and terminate the session associated with the negative price transaction of -100.0 in the shopping cart module.",
-      "priorityLevel": "HIGH",
-      "integration": "splunk",
-      "target": "Search: index=web_logs | where price < 0",
+      "message": "Query SIEM logs to identify all instances of attempts to manipulate price parameters with negative values, especially within multistage processes, and identify affected user sessions or transactions. Monitor application responses for divergence in behavior or error messages that shed light on the exploited logic.",
+      "priorityLevel": "CRITICAL",
+      "integration": "Splunk",
+      "target": "web_application_logs",
       "params": {
-        "action": "terminate_session",
-        "threshold": 0
+        "query": "index=web_app_logs (price=-* OR price<0) checkout_process | fields _time, src_ip, user_id, transaction_id, requested_price",
+        "time_range": "-24h"
       }
     },
     {
       "type": "SCRIPT",
       "assignedRole": "IT_ADMIN",
       "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Mitigate client-side control bypass. Audit application code for hidden price fields (e.g., <input type='hidden' name='price'>) and move price retrieval to server-side logic as per WAHH Chapter 5.",
-      "priorityLevel": "CRITICAL",
-      "integration": "github",
-      "target": "checkout_logic.py",
+      "message": "Locate the key functions and values within the application's business logic that handle price validation and processing in the checkout module. Analyze the code, potentially by decompiling relevant bytecode (e.g., Java with Jad, Silverlight with .NET Reflector) if client-side logic is suspected, to identify the defective assumption that allowed negative price values.",
+      "priorityLevel": "HIGH",
       "params": {
-        "fix_type": "server_side_validation",
-        "validation_rule": "price > 0"
+        "module": "checkout_service",
+        "function_keywords": [
+          "validatePrice",
+          "calculateTotal"
+        ],
+        "analysis_type": "code_review_and_debug_decompilation"
+      }
+    },
+    {
+      "type": "APPROVAL",
+      "assignedRole": "SOC_LEAD",
+      "message": "Review the proposed code fix for the identified logic flaw in the price validation function. Authorize deployment to prevent defective logic from exposing the application to further security vulnerabilities, ensuring the resolution of the flawed assumption made by designers/developers.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "remediation_details": "Fix negative price validation logic in checkout module to prevent financial manipulation and ensure robust input processing for critical security functions."
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Deploy the validated code fix to correct the defective logic that allowed negative prices, ensuring all critical security functions related to transaction processing correctly validate user input and adhere to robust logical processing.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "deployment_target": "production_web_app",
+        "fix_id": "BLF-001-NegativePrice-Fix",
+        "version_control_tag": "v1.0.1_price_fix"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Verify the effectiveness of the deployed fix by re-running the test cases for negative price input and confirm that the application correctly rejects them. Establish enhanced monitoring for suspicious price manipulations or any divergence in expected application behavior.",
+      "priorityLevel": "HIGH",
+      "integration": "TestAutomationPlatform",
+      "target": "checkout_api_regression_suite",
+      "params": {
+        "test_suite": "negative_price_validation_tests",
+        "monitoring_alert_threshold": "high",
+        "monitoring_scope": "checkout_service_logs"
       }
     },
     {
       "type": "WEBHOOK",
       "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Notify the finance department of a potential unauthorized transaction reversal due to business logic manipulation.",
+      "message": "Notify relevant stakeholders and update the incident ticket regarding the successful containment and remediation of the business logic flaw. Confirm that the application's defective assumption regarding price validation has been addressed and verified.",
       "priorityLevel": "MEDIUM",
-      "integration": "slack",
-      "target": "https://hooks.slack.com/services/finance-alerts",
+      "target": "slack_channel_security_alerts",
       "params": {
-        "incident_ref": "PB-BUSLOGIC-001",
-        "impact": "Potential -100.0 credit injection"
+        "incident_id": "INC-BLF-2023-001",
+        "status": "closed",
+        "summary": "Business logic flaw allowing negative price values in checkout process has been contained, remediated, and verified. Root cause: defective price validation logic."
       }
-    },
-    {
-      "type": "APPROVAL",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Approve a comprehensive security review of all multistage processes to prevent 'forced browsing' or out-of-sequence request submissions.",
-      "priorityLevel": "LOW",
-      "integration": "jira",
-      "target": "SEC-AUDIT-2023",
-      "params": {}
     }
   ]
 }

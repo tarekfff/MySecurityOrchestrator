@@ -1,78 +1,78 @@
 {
   "source": "AI Analyzer",
   "severity": "CRITICAL",
-  "title": "OS Command Injection Mitigation - /etc/passwd Leak Attempt",
+  "title": "OS Command Injection Detected: Critical System File Access Attempt",
   "playbook_id": "PB-RCE-001",
-  "ai_confidence": 0.98,
+  "playbook_version": "1.0",
+  "ai_confidence": 0.95,
   "steps": [
+    {
+      "type": "SCRIPT",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Immediately block the identified attacker IP and payload patterns used for OS command injection, as prevention involves 'input \ufb01 lters, 374\u2013377' and 'preventing, 367\u2013368' such attacks.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "ip_address": "{{source.ip}}",
+        "pattern": "; cat /etc/passwd"
+      }
+    },
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Isolate the request logs to identify the vulnerable parameter and source IP for the payload: ; cat /etc/passwd.",
+      "message": "Isolate the affected host to prevent further compromise and contain the attack, as OS command execution allows attackers to 'compromise of the application, enabling you to access data belonging to other users, perform unauthorized actions, and inject arbitrary code and commands'.",
       "priorityLevel": "CRITICAL",
-      "integration": "splunk",
-      "target": "search_logs",
+      "integration": "CrowdStrike",
+      "target": "host:{{affected_host_id}}",
       "params": {
-        "query": "index=web_logs payload=\"; cat /etc/passwd\""
+        "action": "isolate_host",
+        "reason": "Confirmed OS command injection"
       }
     },
     {
-      "type": "SCRIPT",
-      "assignedRole": "ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Verify vulnerability by injecting a time-delay command (e.g., ping 127.0.0.1) as suggested in KB mitigation step 6 to confirm if input is dynamically executed.",
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Query SIEM for all logs related to the affected application and host for the last 24 hours, specifically looking for the payload \"; cat /etc/passwd\" or other 'shell metacharacters, 363, 365' and 'scripting error messages that may indicate that your input is being executed'. This helps 'detecting, 372\u2013374' and understand the 'causes, 368\u2013369' of the injection.",
       "priorityLevel": "HIGH",
-      "integration": "python_executor",
-      "target": "web_application_server",
+      "integration": "Splunk",
+      "target": "index=* source={{application_log}} host={{affected_host_id}} (\"; cat /etc/passwd\" OR \"Runtime.exec\" OR \"scripting error\")",
       "params": {
-        "test_payload": "; ping 127.0.0.1 -c 5"
-      }
-    },
-    {
-      "type": "SCRIPT",
-      "assignedRole": "ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Perform a code review of the application layer. Search for dangerous functions: system(), exec(), shell_exec(), proc_open(), or the backtick operator where unvalidated user input is passed.",
-      "priorityLevel": "HIGH",
-      "integration": "github",
-      "target": "source_code_repo",
-      "params": {
-        "grep_pattern": "(system|exec|shell_exec|passthru|proc_open|popen)"
+        "time_range": "-24h",
+        "query_string": "payload='; cat /etc/passwd' OR Runtime.exec"
       }
     },
     {
       "type": "APPROVAL",
       "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Approve the immediate deployment of a WAF rule to block shell metacharacters and the implementation of a code patch.",
-      "priorityLevel": "HIGH",
-      "integration": "slack",
-      "target": "soc_approvals_channel"
-    },
-    {
-      "type": "INTEGRATION",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "f7000001-0000-0000-0000-000000000001",
-      "message": "Configure WAF/Cloudflare to block requests containing shell metacharacters (; | & `) in the identified parameter.",
+      "message": "Review the SIEM analysis and logs to confirm the vulnerability. Authorize development of a code fix to properly sanitize user input and prevent 'java.lang.runtime.Runtime.exec' from accepting arbitrary shell metacharacters, implementing 'input \ufb01 lters, 374\u2013377' to prevent 'OS command execution, 738'.",
       "priorityLevel": "CRITICAL",
-      "integration": "cloudflare",
-      "target": "waf_rules",
       "params": {
-        "rule_action": "block",
-        "pattern": "[;\\|&`]"
+        "vulnerability_type": "OS Command Injection",
+        "kb_references": [
+          "java.lang.runtime.Runtime.exec",
+          "input filters, 374\u2013377"
+        ]
       }
     },
     {
       "type": "SCRIPT",
-      "assignedRole": "ADMIN",
+      "assignedRole": "IT_ADMIN",
       "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Refactor code to remove direct shell execution. If necessary, use input validation with a strict whitelist of permitted values rather than attempting to strip shell characters which can be bypassed by recursion or encoding.",
-      "priorityLevel": "HIGH",
-      "integration": "git",
-      "target": "vulnerable_branch",
+      "message": "Deploy the approved code patch to remediate the OS command injection vulnerability. Additionally, reset all application-related credentials, especially if 'Password files for the operating system and application' could have been accessed.",
+      "priorityLevel": "CRITICAL",
       "params": {
-        "fix_type": "sanitization_refactor"
+        "patch_id": "RCE-APP-001",
+        "credential_scope": "application_accounts"
+      }
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "ADMIN",
+      "message": "Notify the incident response team and stakeholders about the successful containment and remediation of the OS command injection incident, summarizing the steps taken to 'preventing, 367\u2013368' recurrence.",
+      "priorityLevel": "LOW",
+      "target": "REPLACE_WITH_YOUR_SLACK_WEBHOOK",
+      "params": {
+        "channel": "#sec-incidents",
+        "message": "RCE Incident PB-RCE-001: OS Command Injection via shell metacharacters has been contained and remediated. Affected host isolated, WAF rules deployed, code patched, and credentials reset. Further monitoring in place."
       }
     }
   ]

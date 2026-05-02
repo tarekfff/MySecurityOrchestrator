@@ -1,70 +1,89 @@
 {
   "source": "AI Analyzer",
   "severity": "CRITICAL",
-  "title": "Server-Side Request Forgery (SSRF) - Metadata Service Access Detected",
+  "title": "SSRF Attack Detected Against Internal Metadata Service",
   "playbook_id": "PB-SSRF-001",
-  "ai_confidence": 0.98,
+  "playbook_version": "1.0",
+  "ai_confidence": 0.95,
   "steps": [
     {
-      "type": "INTEGRATION",
-      "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Identify the request parameter containing the internal metadata URL (169.254.169.254). Check if the application allows specifying alternative ports as per KB 8.6.1.",
-      "priorityLevel": "HIGH",
-      "integration": "splunk",
-      "target": "access_logs",
-      "params": {
-        "query": "index=web_logs \"169.254.169.254\"",
-        "lookback": "1h"
-      }
-    },
-    {
       "type": "SCRIPT",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Implement strict input validation on parameters identified. As per KB Hack Steps, ensure the application does not connect to loopback addresses or the internal network. Use the provided Python skill to deploy a regex filter.",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Block the source IP address and any detected malicious URL patterns in the WAF/firewall to prevent further outbound connections and internal network scanning, as part of containing likely malicious intent. The application should integrate its defenses against such attacks with logging and alerting.",
       "priorityLevel": "CRITICAL",
-      "integration": "github",
-      "target": "production-api-gateway",
       "params": {
-        "action": "deploy_hotfix",
-        "language": "python",
-        "remediation_type": "whitelist_validation"
+        "action": "block_ip_and_pattern",
+        "ip_address": "malicious_source_ip",
+        "url_pattern": "*/latest/meta-data/*"
       }
     },
     {
       "type": "INTEGRATION",
       "assignedRole": "ADMIN",
-      "assignedUser": "c3000001-0000-0000-0000-000000000001",
-      "message": "Verify if the metadata service can be hardened (e.g., transition to IMDSv2) or if outbound network restrictions on the application server can block 169.254.169.254.",
-      "priorityLevel": "HIGH",
-      "integration": "aws_cli",
-      "target": "ec2_instance_config",
+      "message": "Terminate the user's session and suspend the associated account, if applicable, based on the detection of malicious intent to access internal resources, consistent with actions for an attempted security breach.",
+      "priorityLevel": "CRITICAL",
+      "integration": "IdentityPlatform",
+      "target": "user_session_management",
       "params": {
-        "command": "modify-instance-metadata-options",
-        "HttpTokens": "required"
+        "user_id": "impacted_user_identifier",
+        "action": "suspend_and_terminate_session"
       }
     },
     {
-      "type": "WEBHOOK",
-      "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Monitor for incoming connections on attacker-controlled servers. Check for delays in response which might indicate timeout due to network restrictions as per KB Section 4.",
-      "priorityLevel": "MEDIUM",
-      "integration": "slack",
-      "target": "incident-response-channel",
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Query the SIEM for any logs related to the access of 'http://169.254.169.254/latest/meta-data/', and investigate for further attempts to connect to arbitrary servers/ports or other services on the loopback address, following the HACK STEPS for SSRF exploitation (5.a, 5.c).",
+      "priorityLevel": "HIGH",
+      "integration": "Splunk",
+      "target": "search",
       "params": {
-        "channel": "#ir-alerts-critical"
+        "query": "index=weblogs (url=\"*169.254.169.254/latest/meta-data*\" OR host=\"169.254.169.254\")",
+        "time_range": "24h"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Initiate a code review to identify the specific request parameters that allow the application to connect to hostnames, IP addresses, or full URLs, as per SSRF HACK STEPS (1 & 5). Implement robust input validation and sanitization for these parameters.",
+      "priorityLevel": "HIGH",
+      "integration": "Jira",
+      "target": "create_issue",
+      "params": {
+        "project": "DEV",
+        "summary": "Code Review: SSRF vulnerability allowing metadata access",
+        "description": "Investigate application code for parameters enabling SSRF to internal services (e.g., http://169.254.169.254/latest/meta-data/) and apply input validation/sanitization to prevent arbitrary connections."
       }
     },
     {
       "type": "APPROVAL",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Review the impact of potential credential exfiltration from the metadata service and approve the incident closure/remediation report.",
-      "priorityLevel": "MEDIUM",
-      "integration": "internal_portal",
-      "target": "compliance_review"
+      "assignedRole": "SOC_LEAD",
+      "message": "Approve the deployment of the code fix to remediate the SSRF vulnerability. Ensure the fix properly implements input validation for all parameters capable of specifying hostnames, IP addresses, or full URLs, which is a critical step in preventing exploitation.",
+      "priorityLevel": "CRITICAL",
+      "params": {}
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "message": "Deploy the approved code fix to the affected application. This fix must implement robust input validation for all parameters that could facilitate connections to arbitrary URLs, as outlined in the SSRF HACK STEPS.",
+      "priorityLevel": "HIGH",
+      "params": {
+        "deployment_target": "production_environment",
+        "patch_id": "SSRF-FIX-20231027"
+      }
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Send a notification to the #security-incidents Slack channel confirming the SSRF incident targeting the internal metadata service has been contained and remediated, and initiate a post-mortem review task.",
+      "priorityLevel": "LOW",
+      "target": "#security-incidents",
+      "params": {
+        "incident_id": "PB-SSRF-001",
+        "status": "Remediated",
+        "summary": "SSRF to metadata endpoint contained and patched. Root cause analysis initiated.",
+        "link": "https://company.jira.com/browse/SSRF-FIX-20231027"
+      }
     }
   ]
 }

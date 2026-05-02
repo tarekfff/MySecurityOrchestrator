@@ -162,7 +162,7 @@ def run_tests():
             print(f"❌ FAILED: {e}")
         
         # Delay to respect free tier rate limits (RPM)
-        time.sleep(3.0)
+        time.sleep(10.0)
 
     print("\n" + "="*50 + "\n📊 TEST SUMMARY\n" + "="*50)
     for res in results:

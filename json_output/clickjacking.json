@@ -1,69 +1,84 @@
 {
   "source": "AI Analyzer",
-  "severity": "HIGH",
-  "title": "Mitigation of Clickjacking Vulnerability in Payment Checkout",
-  "playbook_id": "PB-CLICKJACKING-001",
+  "severity": "MEDIUM",
+  "title": "Clickjacking Vulnerability on /payments/checkout",
+  "playbook_id": "PB-CLICKJACK-001",
+  "playbook_version": "1.0",
   "ai_confidence": 0.95,
   "steps": [
     {
       "type": "INTEGRATION",
-      "assignedRole": "SOC_ANALYST",
-      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
-      "message": "Verify the missing X-Frame-Options and Content-Security-Policy (CSP) headers on /payments/checkout using an automated scan.",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Apply the `X-Frame-Options: SAMEORIGIN` or `DENY` header to the `/payments/checkout` path to prevent framing, directly addressing the missing header identified by the security audit.",
       "priorityLevel": "HIGH",
-      "integration": "splunk",
-      "target": "security_scanner_api",
+      "integration": "WAF_or_CDN",
+      "target": "/payments/checkout",
       "params": {
-        "endpoint": "/payments/checkout",
-        "check": "missing_headers"
+        "header_name": "X-Frame-Options",
+        "header_value": "SAMEORIGIN",
+        "path": "/payments/checkout",
+        "action": "add_security_header"
       }
     },
     {
-      "type": "SCRIPT",
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Verify the successful application of the `X-Frame-Options` header to the `/payments/checkout` path by performing an automated scan or querying WAF logs for the specified URL.",
+      "priorityLevel": "HIGH",
+      "integration": "SecurityScanner",
+      "target": "https://example.com/payments/checkout",
+      "params": {
+        "scan_type": "header_check",
+        "url": "https://example.com/payments/checkout",
+        "expected_header": "X-Frame-Options",
+        "expected_value_pattern": "(SAMEORIGIN|DENY)"
+      }
+    },
+    {
+      "type": "INTEGRATION",
       "assignedRole": "IT_ADMIN",
       "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Implement X-Frame-Options: SAMEORIGIN and Content-Security-Policy: frame-ancestors 'self' in the web server configuration to prevent UI redressing. As per WAHH guidelines, also ensure no relative URLs are vulnerable to base tag hijacking.",
-      "priorityLevel": "HIGH",
-      "integration": "github",
-      "target": "web_config_repo",
+      "message": "Initiate an investigation into the root cause of the missing `X-Frame-Options` header for `/payments/checkout` to understand why the security control was absent during deployment or configuration.",
+      "priorityLevel": "MEDIUM",
+      "integration": "CMDB",
+      "target": "configuration_management_system",
       "params": {
-        "header_value": "SAMEORIGIN",
-        "csp_policy": "frame-ancestors 'self'"
+        "query": "deployment_logs",
+        "asset_id": "payments_checkout_service",
+        "keywords": "X-Frame-Options, header, configuration"
       }
     },
     {
       "type": "APPROVAL",
       "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Review the configuration change for /payments/checkout to ensure it does not break third-party payment integrations.",
+      "message": "Seek approval for the long-term Clickjacking prevention strategy, which could involve a global WAF rule for `X-Frame-Options` or implementing a comprehensive Content Security Policy (CSP) with `frame-ancestors` across all critical web assets.",
+      "priorityLevel": "HIGH",
+      "params": {}
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Deploy the approved long-term Clickjacking mitigation strategy, focusing on either a WAF rule to enforce `X-Frame-Options` globally or updating application code to include a `Content-Security-Policy` with `frame-ancestors` directive.",
       "priorityLevel": "MEDIUM",
-      "integration": "internal_flow",
-      "target": "workflow_engine"
+      "params": {
+        "solution_type": "CSP_or_Global_XFO",
+        "deployment_target": "production_web_assets",
+        "change_control_ticket": "CHG-00012345"
+      }
     },
     {
       "type": "WEBHOOK",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "46d87f0d-5cf1-4fd4-9122-4f686fb8840b",
-      "message": "Trigger a re-scan of the production endpoint to confirm the mitigation is active.",
+      "message": "Incident PB-CLICKJACK-001 for Clickjacking vulnerability on `/payments/checkout` has been contained and long-term remediation initiated. Notifying relevant teams and closing the incident ticket.",
       "priorityLevel": "LOW",
-      "integration": "custom_webhook",
-      "target": "https://vulnerability-scanner.internal/api/retest",
+      "target": "REPLACE_WITH_YOUR_SLACK_WEBHOOK",
       "params": {
-        "target_url": "https://company.com/payments/checkout",
-        "vulnerability_id": "CWE-1027"
-      }
-    },
-    {
-      "type": "INTEGRATION",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Update the security posture report and audit logs to reflect the remediation of the clickjacking vulnerability.",
-      "priorityLevel": "LOW",
-      "integration": "jira",
-      "target": "security_audit_project",
-      "params": {
-        "status": "RESOLVED",
-        "resolution_note": "X-Frame-Options and CSP frame-ancestors headers implemented."
+        "channel": "#security_alerts",
+        "username": "IncidentBot",
+        "text": "Incident PB-CLICKJACK-001 (Clickjacking on /payments/checkout) resolved. X-Frame-Options header applied, long-term strategy in progress. Incident ticket closed.",
+        "icon_emoji": ":white_check_mark:"
       }
     }
   ]

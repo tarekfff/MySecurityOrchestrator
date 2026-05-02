@@ -1,56 +1,81 @@
 {
   "source": "AI Analyzer",
   "severity": "CRITICAL",
-  "title": "Unrestricted File Upload - PHP Web Shell Detection and Remediation",
-  "playbook_id": "PB-UFU-001",
-  "ai_confidence": 0.98,
+  "title": "Webshell Upload Detected and Contained: shell.php.jpg",
+  "playbook_id": "PB-WEBSHELL-001",
+  "playbook_version": "1.0",
+  "ai_confidence": 0.95,
   "steps": [
     {
       "type": "SCRIPT",
-      "assignedRole": "ADMIN",
-      "assignedUser": "c3000001-0000-0000-0000-000000000001",
-      "message": "Immediately isolate and quarantine 'shell.php.jpg' from the web directory. Check for any other files with double extensions or anomalous naming conventions as referenced in WAHH 7.5.3.",
-      "priorityLevel": "CRITICAL"
+      "assignedRole": "SOC_ANALYST",
+      "message": "Based on the identified 'file uploading' activity and the presence of `shell.php.jpg`, immediately delete the malicious file to prevent further execution.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "action": "delete_file",
+        "filename": "shell.php.jpg",
+        "path": "/var/www/html/uploads/"
+      }
     },
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Query logs for any execution attempts targeting the uploaded shell. Look for unusual error messages or status codes (304, 500) that might indicate script injection attempts (WAHH 7.6.2).",
-      "priorityLevel": "HIGH",
-      "integration": "splunk",
-      "target": "web_server_logs",
+      "message": "To prevent further 'file uploading' attempts and other malicious activity, block the source IP address that initiated the webshell upload in the WAF.",
+      "priorityLevel": "CRITICAL",
+      "integration": "WAF",
+      "target": "waf_blocklist",
       "params": {
-        "query": "index=web_logs file='shell.php.jpg' OR status=200"
+        "ip_address": "source_ip_from_alert",
+        "duration": "24h",
+        "reason": "Webshell upload attempt and file uploading activity"
       }
     },
     {
-      "type": "SCRIPT",
-      "assignedRole": "ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Remediate the vulnerability in the source code. Implement strict server-side validation that does not rely on client-side checks (WAHH Chapter 19). Replicate validation logic to check for byte patterns and enforce a strict whitelist of extensions, preventing bypasses like Shift-JIS or UTF-8 encoding exploits.",
-      "priorityLevel": "CRITICAL",
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Given the potential for wider impact from 'file uploading and downloading' capabilities, initiate an EDR scan on the affected host to detect any additional anomalies or malicious payloads.",
+      "priorityLevel": "HIGH",
+      "integration": "CrowdStrike",
+      "target": "endpoint_scan",
       "params": {
-        "remediation_focus": "server-side-validation",
-        "kb_reference": "WAHH-10.1.3"
+        "host_id": "affected_server_id_from_alert",
+        "scan_type": "full_system",
+        "scan_priority": "high"
       }
     },
     {
       "type": "APPROVAL",
       "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Review the forensics report and the code patch. Verify that the file upload functionality is now restricted to non-executable directories and that least-privilege OS accounts are being used for the application tier (WAHH Mitigations).",
-      "priorityLevel": "MEDIUM"
+      "message": "Approve the remediation plan to address the root cause of the unrestricted 'file uploading' vulnerability, specifically focusing on reviewing potential 'debug logic' or insecure parameter handling identified in the application.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "approval_reason": "Strategic decision for vulnerability remediation"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Following approval, create a development ticket to implement fixes for the 'file uploading' vulnerability, ensuring secure handling and validation, especially concerning any 'hidden parameter discovery' mechanisms.",
+      "priorityLevel": "HIGH",
+      "integration": "Jira",
+      "target": "create_issue",
+      "params": {
+        "project": "DEV",
+        "issue_type": "Bug",
+        "summary": "Remediate unrestricted file upload vulnerability and debug logic",
+        "description": "Implement robust validation for file uploads and review potential debug logic or hidden parameters that could bypass security controls, as indicated by 'hidden parameter discovery' methods. This will prevent further 'file uploading' exploits. Assign to IT_ADMIN.",
+        "assignee": "IT_ADMIN"
+      }
     },
     {
       "type": "WEBHOOK",
-      "assignedRole": "EXEC",
-      "assignedUser": "f6000001-0000-0000-0000-000000000001",
-      "message": "Notify leadership of the incident resolution and the steps taken to harden the shared infrastructure against further command injection or file access flaws.",
-      "priorityLevel": "LOW",
-      "target": "corporate_comms_webhook",
+      "assignedRole": "SOC_LEAD",
+      "message": "Incident response workflow for webshell upload completed. All initial 'anomalies' identified during monitoring are addressed and 'file uploading' controls are being hardened. Further monitoring is advised.",
+      "priorityLevel": "MEDIUM",
+      "target": "REPLACE_WITH_YOUR_SLACK_WEBHOOK",
       "params": {
-        "incident_status": "contained"
+        "channel": "#security-incidents",
+        "message": "Webshell upload incident (shell.php.jpg) contained. Remediation ticket (Jira-XXXX) created for IT_ADMIN. Review EDR scan results and ongoing monitoring."
       }
     }
   ]

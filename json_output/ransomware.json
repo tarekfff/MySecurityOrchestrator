@@ -1,47 +1,71 @@
 {
   "source": "AI Analyzer",
   "severity": "CRITICAL",
-  "title": "Ransomware Outbreak - FileServer-01 Mass Encryption",
-  "playbook_id": "PB-RANSOM-001",
-  "ai_confidence": 0.98,
+  "title": "Ransomware Containment and Recovery for FileServer-01",
+  "playbook_id": "PB-RANSOMWARE-001",
+  "playbook_version": "1.0",
+  "ai_confidence": 0.9,
   "steps": [
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "4f2956a1-e00c-48fb-989d-d10ac637507c",
-      "message": "Isolate FileServer-01 from the network using the EDR controller to prevent the spread of .locked encryption.",
+      "message": "Isolate `FileServer-01` to contain the ransomware, reflecting the principle of immediate action against 'likely malicious intent' to prevent further spread, similar to terminating sessions.",
       "priorityLevel": "CRITICAL",
-      "integration": "crowdstrike",
+      "integration": "EDR",
       "target": "FileServer-01",
       "params": {
-        "action": "contain"
+        "action": "isolate_host",
+        "reason": "ransomware_encryption"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Block any identified malicious IP addresses or C2 patterns in WAF/firewall to prevent further communication or exfiltration, as per the SCRIPT rule for 'blocking IPs/patterns in a WAF/firewall'.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "ip_address": "{{threat_actor_ip}}",
+        "pattern": "{{c2_pattern}}"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Terminate user sessions and suspend any accounts associated with the detected ransomware activity on `FileServer-01`, adhering to the mitigation recommendation to 'terminate the user\u2019s session, and, if applicable, suspend the user\u2019s account' for malicious intent.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "host": "FileServer-01",
+        "action": "terminate_and_suspend_compromised_accounts"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "message": "Initiate backup recovery procedures for `FileServer-01` and take a forensic snapshot, leveraging the SCRIPT capability for 'running backup scripts' to ensure data integrity and facilitate post-incident analysis.",
+      "priorityLevel": "CRITICAL",
+      "params": {
+        "host": "FileServer-01",
+        "action": "restore_backup_and_snapshot_for_forensics"
       }
     },
     {
       "type": "APPROVAL",
       "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Review incident logs and determine if the attack vector involved obfuscated bytecode or XSS-based browser exploitation as referenced in the WAHH KB.",
-      "priorityLevel": "HIGH"
+      "message": "Review the automated containment actions and approve a comprehensive remediation plan, including potential system rebuild or extensive network segmentation, given the critical nature of the ransomware attack and its high-impact, irreversible consequences.",
+      "priorityLevel": "CRITICAL",
+      "params": {}
     },
     {
-      "type": "SCRIPT",
-      "assignedRole": "ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Deploy mitigation script to identify the source process of the encryption. Utilize 'mitigation' and 'python' skills to automate file restoration from immutable backups.",
-      "priorityLevel": "HIGH",
-      "integration": "ansible",
-      "target": "FileServer-01",
+      "type": "WEBHOOK",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Notify the incident response team and relevant stakeholders about the critical ransomware incident and create a high-priority incident ticket for tracking and follow-up, using WEBHOOK functionality for 'Slack/Teams alerts, opening Jira tickets'.",
+      "priorityLevel": "CRITICAL",
+      "target": "slack_channel_ir_critical",
       "params": {
-        "script_path": "/opt/security/restore_fs.py"
+        "incident_id": "{{incident_id}}",
+        "severity": "CRITICAL",
+        "description": "Ransomware detected on FileServer-01, mass file encryption. Automated containment initiated, awaiting remediation approval."
       }
-    },
-    {
-      "type": "APPROVAL",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Authorize emergency communication plan and evaluate potential data breach liability regarding the encrypted data on FileServer-01.",
-      "priorityLevel": "CRITICAL"
     }
   ]
 }

@@ -1,66 +1,104 @@
 {
   "source": "AI Analyzer",
   "severity": "CRITICAL",
-  "title": "Path Traversal Attack Detected: Access to Sensitive System Files",
-  "playbook_id": "PB-PATH-TRAVERSAL-001",
-  "ai_confidence": 0.98,
+  "title": "Critical Path Traversal Attempt: /etc/shadow Access",
+  "playbook_id": "PB-PATHTRAV-001",
+  "playbook_version": "1.0",
+  "ai_confidence": 0.95,
   "steps": [
     {
       "type": "SCRIPT",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Immediately terminate the user's session and suspend the account associated with the request to ../../etc/shadow as per KB instructions.",
+      "message": "Automatically block path traversal sequences like '../../' and their encoded variants (e.g., '%c0%ae%c0%ae', '%252f', '%u002e', '..%c0%af', '..%255c') in the application's WAF or input filter, as these indicate malicious intent and are used to bypass poorly designed input validation filters, as per KB sections 7.4.5, 'Attacking Back-End Components', and 'Attacking the Application Server'.",
       "priorityLevel": "CRITICAL",
-      "integration": "active_directory",
-      "target": "user_session_manager",
       "params": {
-        "action": "suspend",
-        "reason": "Path Traversal Attempt"
+        "pattern_to_block": "../../etc/shadow",
+        "block_action": "deny_request_and_log",
+        "encoded_variants": [
+          "%c0%ae%c0%ae",
+          "%252f",
+          "%u002e",
+          "..%c0%af",
+          "..%255c"
+        ]
       }
     },
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000002-0000-0000-0000-000000000002",
-      "message": "Monitor filesystem activity using strace/ltrace (Linux) or FileMon (Windows) to identify if any other files were successfully accessed during the traversal attempt.",
-      "priorityLevel": "HIGH",
-      "integration": "sentinelone",
-      "target": "affected_web_server",
+      "message": "Block the source IP address identified in the incident logs at the perimeter firewall or WAF, as the presence of path traversal sequences indicates likely malicious intent, as recommended in the KB to 'terminate the user\u2019s session, and... suspend the user\u2019s account and generate an alert to an administrator'.",
+      "priorityLevel": "CRITICAL",
+      "integration": "WAF",
+      "target": "IP_BLOCKLIST",
       "params": {
-        "action": "filesystem_audit",
-        "path": "/etc/"
+        "ip_address": "ATTACKER_IP_FROM_LOGS",
+        "duration_hours": "24",
+        "reason": "Path Traversal Attempt"
       }
     },
     {
-      "type": "SCRIPT",
+      "type": "INTEGRATION",
       "assignedRole": "ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Perform a line-by-line code review of the /download endpoint. Implement robust input validation that rejects traversal sequences (../), double-encoded forms (%252e), and illegal Unicode representations. Ensure the application is not performing redundant decoding after validation.",
+      "message": "Terminate the active user session and suspend the account associated with the path traversal attempt, if applicable, to prevent further unauthorized actions, as the KB states to 'terminate the user\u2019s session, and, if applicable, suspend the user\u2019s account'.",
       "priorityLevel": "HIGH",
-      "integration": "github",
-      "target": "backend_api_repo",
+      "integration": "IAM_System",
+      "target": "user_management_api",
       "params": {
-        "file_path": "main.php",
-        "issue_category": "Vulnerability Remediation"
+        "user_id": "USER_ID_FROM_LOGS",
+        "session_id": "SESSION_ID_FROM_LOGS",
+        "action": "suspend_account_and_terminate_session",
+        "reason": "Confirmed Path Traversal Attack"
+      }
+    },
+    {
+      "type": "INTEGRATION",
+      "assignedRole": "SOC_ANALYST",
+      "message": "Initiate a forensic search in the SIEM for any logs indicating successful access to '/etc/shadow', command execution (e.g., via injected command-line parameters or $IFS), or other anomalous activity originating from the vulnerable application, to assess the full impact of the potential arbitrary file access or command execution described in KB section 7.4.5.",
+      "priorityLevel": "CRITICAL",
+      "integration": "Splunk",
+      "target": "search",
+      "params": {
+        "query": "index=web_app_logs (file_access=\"/etc/shadow\" OR command_execute=\"*\") source_ip=\"ATTACKER_IP_FROM_LOGS\" | head 100",
+        "time_range": "2h",
+        "search_type": "event"
       }
     },
     {
       "type": "APPROVAL",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Approve the architectural shift to a chrooted filesystem or mounting the web-root as a separate logical drive to natively ignore traversal sequences.",
-      "priorityLevel": "MEDIUM",
-      "integration": "jira",
-      "target": "infrastructure_board"
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Approve the remediation plan for the identified path traversal vulnerability, which must include a thorough code audit for improper input validation on file path parameters and implementation of canonicalization or chrooted filesystems, as discussed in the KB for preventing file inclusion and path traversal flaws. Special attention should be paid to known bypass techniques such as overlong UTF-8 and double URL encoding.",
+      "priorityLevel": "HIGH",
+      "params": {
+        "remediation_plan_link": "https://confluence.wahh-app.com/path_traversal_fix_plan_v1.2",
+        "affected_component": "File Download Module"
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Execute the automated deployment script to apply the approved code patch or configuration updates that enforce strict input validation, canonicalization, and potentially chrooted filesystems, thereby fixing the path traversal vulnerability as recommended in the KB for mitigating file inclusion bugs.",
+      "priorityLevel": "HIGH",
+      "params": {
+        "deployment_script_name": "deploy_patch_path_traversal_fix.sh",
+        "target_environment": "production",
+        "rollback_plan_link": "https://confluence.wahh-app.com/rollback_plan_v1.0"
+      }
     },
     {
       "type": "WEBHOOK",
-      "assignedRole": "LEGAL",
-      "assignedUser": "e5000001-0000-0000-0000-000000000001",
-      "message": "Assess the impact of the attempt to access /etc/shadow. Prepare a breach notification report if the monitoring tools indicate successful data exfiltration.",
+      "assignedRole": "ADMIN",
+      "message": "Send a notification to the security and operations teams regarding the resolution of the critical path traversal incident and automatically create a high-priority post-incident review ticket to document findings and ensure continuous improvement, as the KB recommends alerting administrators.",
       "priorityLevel": "MEDIUM",
-      "integration": "slack",
-      "target": "legal_compliance_channel"
+      "target": "slack_security_channel",
+      "params": {
+        "channel": "sec_incidents",
+        "message": "Critical Path Traversal Incident (ID: PB-PATHTRAV-001) remediated. Review ticket created.",
+        "ticket_system": "Jira",
+        "ticket_summary": "Post-Incident Review: Critical Path Traversal Vulnerability",
+        "ticket_priority": "High"
+      }
     }
   ]
 }

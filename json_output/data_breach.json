@@ -1,92 +1,81 @@
 {
   "source": "AI Analyzer",
   "severity": "CRITICAL",
-  "title": "High Volume Data Exfiltration & Information Disclosure Mitigation",
-  "playbook_id": "PB-EXFIL-001",
-  "ai_confidence": 0.98,
+  "title": "Data Breach: High Volume Exfiltration to External IP",
+  "playbook_id": "PB-DATA-BREACH-001",
+  "playbook_version": "1.0",
+  "ai_confidence": 0.95,
   "steps": [
     {
-      "type": "INTEGRATION",
+      "type": "SCRIPT",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000001-0000-0000-0000-000000000001",
-      "message": "Block the malicious external IP 45.33.12.98 at the perimeter firewall to halt current exfiltration.",
+      "message": "Block the detected external exfiltration IP '45.33.12.98' at the network perimeter (firewall/WAF) to immediately reduce information leakage to a minimum and to withhold sensitive data that can critically undermine an application\u2019s security.",
       "priorityLevel": "CRITICAL",
-      "integration": "firewall",
-      "target": "45.33.12.98",
       "params": {
-        "action": "block",
-        "direction": "outbound"
-      }
-    },
-    {
-      "type": "SCRIPT",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Analyze application logs for SQL injection patterns or verbose error messages (ODBC/Java stack traces) that may have disclosed sensitive data, as described in WAHH Chapter 15.",
-      "priorityLevel": "HIGH",
-      "integration": "python_executor",
-      "target": "app_server_logs",
-      "params": {
-        "script_type": "log_parser",
-        "search_pattern": "select.*from.*users|stack_trace|error_description"
+        "action": "block_ip",
+        "ip_address": "45.33.12.98",
+        "reason": "Detected data exfiltration"
       }
     },
     {
       "type": "INTEGRATION",
       "assignedRole": "SOC_ANALYST",
-      "assignedUser": "a1000002-0000-0000-0000-000000000002",
-      "message": "Retrieve a list of all files and account numbers accessed by the internal source IP prior to exfiltration to determine breach scope.",
-      "priorityLevel": "HIGH",
-      "integration": "splunk",
-      "target": "siem_index_main",
+      "message": "Query the SIEM to identify the internal source host(s) involved in the exfiltration and to perform a forensic examination of application logs, looking for verbose error messages or information disclosure patterns mentioned in the KB (e.g., 'usernames, log entries, and user profile details') that could indicate the initial compromise or data exposure.",
+      "priorityLevel": "CRITICAL",
+      "integration": "SIEM",
+      "target": "Splunk",
       "params": {
-        "query": "search sourcetype=access_logs dest_ip=45.33.12.98 | table uri, client_ip, bytes"
-      }
-    },
-    {
-      "type": "SCRIPT",
-      "assignedRole": "IT_ADMIN",
-      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
-      "message": "Implement code changes to suppress verbose error messages and disable debug functionality in the production environment to prevent further information disclosure (WAHH p.627).",
-      "priorityLevel": "HIGH",
-      "integration": "github",
-      "target": "web_app_repo",
-      "params": {
-        "action": "commit_mitigation",
-        "description": "Disable customErrors and stack trace output"
+        "query": "index=* (dest_ip=\"45.33.12.98\" OR (data_exfiltration_alert AND category=\"data_breach\")) | fields _time, host, src_ip, dest_ip, volume, process, user",
+        "time_range": "-24h"
       }
     },
     {
       "type": "APPROVAL",
       "assignedRole": "SOC_LEAD",
-      "assignedUser": "b2000001-0000-0000-0000-000000000001",
-      "message": "Review identified vulnerabilities (Broken Access Control/SQLi) and approve the remediation plan to harden application entry points.",
-      "priorityLevel": "MEDIUM",
-      "integration": "internal_approval_system",
-      "target": "soc_lead_review"
-    },
-    {
-      "type": "WEBHOOK",
-      "assignedRole": "LEGAL",
-      "assignedUser": "e5000001-0000-0000-0000-000000000001",
-      "message": "Initiate data breach notification protocols for 5GB exfiltration incident per regulatory requirements.",
-      "priorityLevel": "HIGH",
-      "integration": "legal_notification_api",
-      "target": "https://legal.internal/api/v1/incident-report",
+      "message": "Review all gathered evidence, including the confirmed exfiltrated data volume and type (if captured), and the identified internal source. Authorize the full scope of remediation actions, including potential system isolation and user credential resets, acknowledging the critical impact of confirmed data exfiltration on application security.",
+      "priorityLevel": "CRITICAL",
       "params": {
-        "incident_id": "PB-EXFIL-001",
-        "volume": "5GB",
-        "data_type": "sensitive_user_info"
+        "approval_scope": "Full incident remediation authorization",
+        "impact_assessment_required": true
       }
     },
     {
-      "type": "APPROVAL",
-      "assignedRole": "CISO",
-      "assignedUser": "d4000001-0000-0000-0000-000000000001",
-      "message": "Final sign-off on incident closure and verification that information disclosure vectors are strictly controlled.",
-      "priorityLevel": "LOW",
-      "integration": "executive_dashboard",
-      "target": "ciso_approval_queue"
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Force password resets for any user accounts identified as potentially compromised or whose 'current user\u2019s password' or 'user profile details' may have been involved in or exposed by the data exfiltration incident. Also, revoke all active sessions for these users.",
+      "priorityLevel": "HIGH",
+      "params": {
+        "action": "reset_credentials",
+        "user_list": "placeholder_affected_users",
+        "session_revoke": true
+      }
+    },
+    {
+      "type": "SCRIPT",
+      "assignedRole": "IT_ADMIN",
+      "assignedUser": "9cf73987-ee40-423f-b4a0-336d419dd94e",
+      "message": "Implement code fixes or patches to address the underlying vulnerability (e.g., SQL injection leading to error-based data extraction, broken access controls) that enabled the information disclosure and subsequent data exfiltration, ensuring the application does not 'publish information that may be of use to an attacker'.",
+      "priorityLevel": "HIGH",
+      "params": {
+        "action": "deploy_patch",
+        "vulnerability_id": "placeholder_vulnerability_id",
+        "application_affected": "placeholder_app_name"
+      }
+    },
+    {
+      "type": "WEBHOOK",
+      "assignedRole": "ADMIN",
+      "message": "Notify the Security Operations Center (SOC) channel and create a critical incident ticket in the ITSM system detailing the data breach, the exfiltration volume, and the actions taken, emphasizing the need to 'protect by effective access controls and made available only where strictly necessary' going forward.",
+      "priorityLevel": "CRITICAL",
+      "target": "REPLACE_WITH_YOUR_SLACK_WEBHOOK",
+      "params": {
+        "channel": "#security-incidents",
+        "incident_id": "INC-DB-2023-1234",
+        "severity": "CRITICAL",
+        "description": "Unusually high data exfiltration to external IP 45.33.12.98 detected by DLP. 5GB of data exfiltrated. Initial containment and investigation steps initiated.",
+        "status": "In Progress"
+      }
     }
   ]
 }
