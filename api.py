@@ -396,7 +396,7 @@ async def analyze(incident: dict, background_tasks: BackgroundTasks):
 
 # ── AI Assistant (streaming + Supabase persistence) ───────────────────────────
 
-ASSIST_MODEL = "gemini-2.5-flash-preview-05-20"
+ASSIST_MODEL = "models/gemini-2.5-flash"
 
 SYSTEM_PROMPT = """\
 You are CyberGuard AI, an expert cybersecurity assistant specializing in web application security.
