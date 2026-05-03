@@ -275,22 +275,38 @@ def retrieve(req: RetrieveRequest):
 
 # ── Webhook helper ────────────────────────────────────────────────────────────
 
-async def _send_to_friend(workflow: dict):
-    """Sends the generated workflow JSON to the friend's webhook."""
+async def _send_to_friend(payload: dict):
+    """Sends a JSON payload (workflow or error) to the configured webhook."""
     if not settings.friend_webhook_url:
         return
-    
+
     async with httpx.AsyncClient() as client:
         try:
-            print(f"📡 Sending workflow to webhook: {settings.friend_webhook_url}")
+            print(f"📡 Sending to webhook: {settings.friend_webhook_url}")
             resp = await client.post(
-                settings.friend_webhook_url, 
-                json=workflow,
-                timeout=10.0
+                settings.friend_webhook_url,
+                json=payload,
+                timeout=10.0,
             )
             print(f"✅ Webhook sent! Status: {resp.status_code}")
         except Exception as e:
             print(f"❌ Webhook failed: {e}")
+
+
+def _error_payload(incident_type: str, error_msg: str, keywords: list[str], topic_hint) -> dict:
+    return {
+        "error": True,
+        "incident_type": incident_type,
+        "summary": error_msg,
+        "workflow": None,
+        "retrieval": {
+            "query": " ".join(keywords),
+            "topic_used": topic_hint,
+            "chunks_found": 0,
+            "grouped": {},
+            "assembled_context": "",
+        },
+    }
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(incident: dict, background_tasks: BackgroundTasks):
@@ -321,18 +337,22 @@ async def analyze(incident: dict, background_tasks: BackgroundTasks):
             )
         )
     except Exception as e:
-        # Fallback if embedding fails (e.g. rate limit)
+        error_msg = f"Analysis failed due to AI service error: {e}"
+        background_tasks.add_task(
+            _send_to_friend,
+            _error_payload(str(incident_type or "Unknown"), error_msg, keywords, topic_hint),
+        )
         return AnalyzeResponse(
             incident_type=str(incident_type or "Unknown"),
-            summary=f"Analysis failed due to AI service error: {e}",
+            summary=error_msg,
             retrieval=RetrieveResponse(
                 query=" ".join(keywords),
                 topic_used=topic_hint,
                 chunks_found=0,
                 grouped={},
-                assembled_context="AI service unavailable."
+                assembled_context="AI service unavailable.",
             ),
-            workflow=None
+            workflow=None,
         )
 
     grouped_out: dict[str, list[SearchResult]] = {}
@@ -367,10 +387,12 @@ async def analyze(incident: dict, background_tasks: BackgroundTasks):
 
     workflow_prompt = build_workflow_prompt(raw_log, result, users)
     workflow_json = None
+    workflow_error: str | None = None
     try:
         workflow_json = embedder.generate_json(workflow_prompt, model=ASSIST_MODEL)
     except Exception as e:
         import traceback
+        workflow_error = str(e)
         print(f"Workflow generation failed: {e}")
         traceback.print_exc()
 
@@ -385,12 +407,22 @@ async def analyze(incident: dict, background_tasks: BackgroundTasks):
 
     if workflow_json:
         background_tasks.add_task(_send_to_friend, workflow_json)
+    elif workflow_error:
+        background_tasks.add_task(
+            _send_to_friend,
+            _error_payload(
+                str(incident_type),
+                f"Workflow generation failed: {workflow_error}",
+                keywords,
+                topic_hint,
+            ),
+        )
 
     return AnalyzeResponse(
         incident_type=str(incident_type),
         summary=f"Analysis of {incident_type} using {len(result.raw_chunks)} relevant KB chunks.",
         retrieval=ret_resp,
-        workflow=workflow_json
+        workflow=workflow_json,
     )
 
 
