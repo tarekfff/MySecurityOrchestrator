@@ -105,7 +105,7 @@ Workflows assign tasks to the right person based on:
 
 ## Getting Started
 
-### 1. Clone & Install
+### Step 1 — Clone & Install
 
 ```bash
 git clone <repo-url>
@@ -113,63 +113,164 @@ cd HackathoonEmbedder
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment
+### Step 2 — Configure Environment
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
+Fill in `.env`:
 
 ```env
+# Required
 GEMINI_API_KEY=your_gemini_api_key_here
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_KEY=your_service_role_key_here
 PDF_PATH=The Web Application Hacker's Handbook - ...pdf
 
-# Optional: forward workflows to a webhook
-FRIEND_WEBHOOK_URL=https://hooks.slack.com/services/...
+# Webhook — receives every generated workflow AND error payloads
+FRIEND_WEBHOOK_URL=http://localhost:3001/api/workflow/execute
 
 # Ingestion tuning
 EMBED_BATCH_SIZE=20
 EMBED_DELAY_SECONDS=1.0
 CHUNK_MAX_WORDS=250
 CHUNK_MIN_WORDS=50
+
+# API
+API_HOST=0.0.0.0
+API_PORT=8000
 ```
 
-### 3. Prepare Database
+### Step 3 — Prepare Database
 
-Paste [sql/schema.sql](sql/schema.sql) into your **Supabase SQL Editor**. This creates:
+Open your **Supabase SQL Editor** and run both files in order:
+
+```
+sql/schema.sql       ← cyber_chunks table, ivfflat index, match_cyber_chunks RPC
+sql/chat_schema.sql  ← chat sessions + messages tables (AI assistant feature)
+```
+
+`schema.sql` creates:
 - `cyber_chunks` table with `vector(768)` column
-- `ivfflat` index for fast cosine similarity
-- `match_cyber_chunks` RPC for filtered vector search
-- `list_topics` RPC for topic inventory
+- `ivfflat` cosine index (lists = 100)
+- `match_cyber_chunks(query_embedding, match_count, filter_topic, filter_type, min_similarity)` RPC
+- `list_topics()` RPC
 
-For the AI chat feature, also run [sql/chat_schema.sql](sql/chat_schema.sql).
-
-### 4. Run Ingestion
+### Step 4 — Run Ingestion
 
 ```bash
-# Full ingestion (extract → chunk → embed → store)
+# Full ingestion: extract → chunk → embed → store (736 chunks, ~15 min on free tier)
 python ingest.py
 
-# Dry-run — parse + chunk only, no DB writes
+# Dry-run: parse + chunk only, no DB writes — use to verify chunking first
 python ingest.py --dry-run
 
-# Ingest a single topic
+# Ingest a single topic only
 python ingest.py --topic xss
 
-# Resume — skip already-stored chunks (safe to re-run)
+# Resume: skip chunks already in DB — safe to re-run after interruption
 python ingest.py --resume
 ```
 
-### 5. Start the API
+### Step 5 — Start the API
 
 ```bash
-uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Verify it's running:
+
+```bash
+curl http://localhost:8000/health
+# {"status":"ok","chunk_count":736}
 ```
 
 Interactive docs: `http://localhost:8000/docs`
+
+### Step 6 — Run the Test Suite
+
+See the full **[Testing](#testing)** section below.
+
+---
+
+## Testing
+
+### Webhook & Error Pipeline Test
+
+[scratch/test_error_webhook.py](scratch/test_error_webhook.py) is a self-contained test that:
+
+1. Spins up a local HTTP webhook catcher on `127.0.0.1:9997`
+2. Patches `FRIEND_WEBHOOK_URL` to point at the catcher (no `.env` change needed)
+3. Runs **3 test cases** against the live `analyze` logic and prints exactly what the catcher received
+
+**Requirements:** API does NOT need to be running — the test imports the logic directly.
+
+```bash
+python scratch/test_error_webhook.py
+```
+
+Expected output:
+
+```
+============================================================
+Starting webhook catcher on http://127.0.0.1:9997
+============================================================
+
+[TEST 1] Simulating retrieval/embedding failure...
+  ✅  Webhook received!
+     error        : True
+     incident_type: brute_force
+     summary      : Analysis failed due to AI service error: Simulated rate-limit / embedding failure
+     workflow     : None
+
+[TEST 2] Simulating workflow generation failure...
+  ✅  Webhook received!
+     error        : True
+     incident_type: SQL Injection
+     summary      : Workflow generation failed: Simulated Gemini timeout during workflow generation
+     workflow     : None
+
+[TEST 3] Happy path — successful analysis (no error webhook expected)...
+  ✅  Webhook received (successful workflow, not an error)
+     title   : SSH Brute-Force Attack on Root Account Detected
+     severity: HIGH
+     steps   : 6 step(s)
+
+============================================================
+All tests complete.
+============================================================
+```
+
+#### What each test covers
+
+| Test | Scenario | Expected webhook |
+|------|----------|-----------------|
+| 1 | Embedding API throws (rate limit / outage) | `{ "error": true, "workflow": null }` |
+| 2 | Workflow generation throws (Gemini timeout) | `{ "error": true, "workflow": null }` |
+| 3 | Full success — real Gemini call | Valid workflow JSON with 5–7 steps |
+
+#### Error webhook payload shape
+
+When an error occurs the webhook receives:
+
+```json
+{
+  "error": true,
+  "incident_type": "brute_force",
+  "summary": "Analysis failed due to AI service error: ...",
+  "workflow": null,
+  "retrieval": {
+    "query": "sshd Multiple authentication failures ...",
+    "topic_used": "brute_force",
+    "chunks_found": 0,
+    "grouped": {},
+    "assembled_context": ""
+  }
+}
+```
+
+The receiving server checks `analysisData.workflow` — when `null` it returns `200` with "no automated actions recommended", so no crash or 422.
 
 ---
 
@@ -326,6 +427,81 @@ The generated workflow follows the schema defined in [output.md](output.md).
     }
   ]
 }
+```
+
+---
+
+## Pre-generated Workflow Examples (`json_output/`)
+
+The [json_output/](json_output/) folder contains **19 ready-to-use IR workflow JSON files**, one per attack type. These were generated by running `/analyze` against real Wazuh-style incidents and are the exact format accepted by the orchestrator and the Next.js webhook endpoint.
+
+| File | Attack Type | Severity | Steps |
+|------|-------------|----------|-------|
+| [xss.json](json_output/xss.json) | Reflected XSS via search query parameter | HIGH | 6 |
+| [sql_injection.json](json_output/sql_injection.json) | SQL Injection with data exposure | HIGH | 6 |
+| [brute_force.json](json_output/brute_force.json) | SSH brute force on root account | CRITICAL | 6 |
+| [csrf.json](json_output/csrf.json) | Cross-Site Request Forgery | MEDIUM | 5 |
+| [rce.json](json_output/rce.json) | Remote Code Execution | CRITICAL | 6 |
+| [path_traversal.json](json_output/path_traversal.json) | Directory traversal / LFI | HIGH | 5 |
+| [session_management.json](json_output/session_management.json) | Session hijacking / fixation | HIGH | 5 |
+| [access_control.json](json_output/access_control.json) | Broken access control / IDOR | HIGH | 5 |
+| [xxe.json](json_output/xxe.json) | XML External Entity injection | HIGH | 6 |
+| [ssrf.json](json_output/ssrf.json) | SSRF to internal metadata endpoint | HIGH | 6 |
+| [clickjacking.json](json_output/clickjacking.json) | Clickjacking via missing X-Frame-Options | LOW | 4 |
+| [open_redirect.json](json_output/open_redirect.json) | Open redirect phishing vector | MEDIUM | 5 |
+| [file_upload.json](json_output/file_upload.json) | Malicious file upload (webshell) | CRITICAL | 6 |
+| [deserialization.json](json_output/deserialization.json) | Insecure deserialization | HIGH | 6 |
+| [business_logic.json](json_output/business_logic.json) | Business logic abuse | MEDIUM | 5 |
+| [phishing.json](json_output/phishing.json) | Spear-phishing / credential harvesting | HIGH | 5 |
+| [ransomware.json](json_output/ransomware.json) | Ransomware — mass encryption detected | CRITICAL | 6 |
+| [data_breach.json](json_output/data_breach.json) | Data exfiltration / PII breach | CRITICAL | 6 |
+| [ddos.json](json_output/ddos.json) | DDoS / SYN flood | HIGH | 5 |
+
+### Workflow JSON structure
+
+Every file follows this top-level schema:
+
+```json
+{
+  "source": "AI Analyzer",
+  "severity": "CRITICAL | HIGH | MEDIUM | LOW",
+  "title": "Short incident title (max 80 chars)",
+  "playbook_id": "PB-<TOPIC>-001",
+  "playbook_version": "1.0",
+  "ai_confidence": 0.95,
+  "steps": [ ...5–7 step objects... ]
+}
+```
+
+Each step contains:
+
+```json
+{
+  "type": "SCRIPT | INTEGRATION | WEBHOOK | APPROVAL",
+  "assignedRole": "SOC_ANALYST | SOC_LEAD | CISO | IT_ADMIN | LEGAL | EXEC | ADMIN",
+  "assignedUser": "<UUID — only when a specific profile match was found>",
+  "message": "Specific technical instruction grounded in the WAHH knowledge base",
+  "priorityLevel": "CRITICAL | HIGH | MEDIUM | LOW",
+  "integration": "<platform name — INTEGRATION steps only>",
+  "target": "<resource or URL — INTEGRATION / WEBHOOK steps>",
+  "params": { "<key>": "<extracted entity from the log>" }
+}
+```
+
+### Send a pre-generated workflow to the orchestrator
+
+```bash
+# Pipe any file straight into the webhook endpoint
+curl -X POST http://localhost:3001/api/workflow/execute \
+  -H "Content-Type: application/json" \
+  -d @json_output/brute_force.json
+```
+
+Or execute locally via `orchestrator.py`:
+
+```bash
+python orchestrator.py
+# Edit the target_file path at the bottom of orchestrator.py to pick a different attack
 ```
 
 ---
