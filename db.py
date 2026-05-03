@@ -18,6 +18,8 @@ from chunker import Chunk
 
 TABLE = "cyber_chunks"
 PROFILES_TABLE = "profiles"
+SESSIONS_TABLE = "chat_sessions"
+MESSAGES_TABLE = "chat_messages"
 
 
 class SupabaseDB:
@@ -108,3 +110,82 @@ class SupabaseDB:
             .execute()
         )
         return resp.data or []
+
+    # ── Chat sessions ─────────────────────────────────────────────────────────
+
+    def create_chat_session(
+        self,
+        user_id: Optional[str] = None,
+        title: str = "New chat",
+        suspected_attack: Optional[str] = None,
+        task_context: Optional[str] = None,
+        user_role: Optional[str] = None,
+    ) -> dict:
+        row = {
+            "title": title,
+            **({"user_id": user_id} if user_id else {}),
+            **({"suspected_attack": suspected_attack} if suspected_attack else {}),
+            **({"task_context": task_context} if task_context else {}),
+            **({"user_role": user_role} if user_role else {}),
+        }
+        resp = self.client.table(SESSIONS_TABLE).insert(row).execute()
+        return resp.data[0] if resp.data else {}
+
+    def list_chat_sessions(self, user_id: Optional[str] = None) -> list[dict]:
+        query = (
+            self.client.table("chat_sessions_preview")
+            .select("*")
+            .order("updated_at", desc=True)
+        )
+        if user_id:
+            query = query.eq("user_id", user_id)
+        resp = query.execute()
+        return resp.data or []
+
+    def get_chat_session(self, session_id: str) -> Optional[dict]:
+        resp = (
+            self.client.table(SESSIONS_TABLE)
+            .select("*")
+            .eq("id", session_id)
+            .limit(1)
+            .execute()
+        )
+        return resp.data[0] if resp.data else None
+
+    def get_chat_messages(self, session_id: str) -> list[dict]:
+        resp = (
+            self.client.table(MESSAGES_TABLE)
+            .select("id, role, content, created_at")
+            .eq("session_id", session_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        return resp.data or []
+
+    def add_chat_message(self, session_id: str, role: str, content: str) -> dict:
+        resp = (
+            self.client.table(MESSAGES_TABLE)
+            .insert({"session_id": session_id, "role": role, "content": content})
+            .execute()
+        )
+        return resp.data[0] if resp.data else {}
+
+    def save_chat_turn(self, session_id: str, user_text: str, assistant_text: str) -> None:
+        """Insert user + assistant messages in one batch."""
+        rows = [
+            {"session_id": session_id, "role": "user",      "content": user_text},
+            {"session_id": session_id, "role": "assistant",  "content": assistant_text},
+        ]
+        self.client.table(MESSAGES_TABLE).insert(rows).execute()
+
+    def rename_chat_session(self, session_id: str, title: str) -> dict:
+        resp = (
+            self.client.table(SESSIONS_TABLE)
+            .update({"title": title})
+            .eq("id", session_id)
+            .execute()
+        )
+        return resp.data[0] if resp.data else {}
+
+    def delete_chat_session(self, session_id: str) -> None:
+        self.client.table(SESSIONS_TABLE).delete().eq("id", session_id).execute()

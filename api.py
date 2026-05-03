@@ -16,12 +16,18 @@ POST /ingest/trigger         → kick off ingestion in a background thread
 
 from __future__ import annotations
 
+import json
 import threading
-from typing import Optional
+import uuid
+from typing import AsyncGenerator, Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import httpx
+from google import genai
+from google.genai import types as gtypes
 
 from config import settings
 from db import SupabaseDB
@@ -33,6 +39,16 @@ app = FastAPI(
     description="Embedding retrieval pipeline over The Web Application Hacker's Handbook",
     version="1.0.0",
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Conversation memory: conversation_id → list of {role, parts} dicts
+_conversations: dict[str, list[dict]] = {}
 
 # Shared singletons — initialised once on first use
 _retriever:  Retriever  | None = None
@@ -375,6 +391,286 @@ async def analyze(incident: dict, background_tasks: BackgroundTasks):
         summary=f"Analysis of {incident_type} using {len(result.raw_chunks)} relevant KB chunks.",
         retrieval=ret_resp,
         workflow=workflow_json
+    )
+
+
+# ── AI Assistant (streaming + Supabase persistence) ───────────────────────────
+
+ASSIST_MODEL = "gemini-2.5-flash-preview-05-20"
+
+SYSTEM_PROMPT = """\
+You are CyberGuard AI, an expert cybersecurity assistant specializing in web application security.
+You have deep knowledge from The Web Application Hacker's Handbook and real-world incident response.
+
+When helping a user with a security task:
+- Give clear, actionable remediation steps
+- Reference specific techniques (OWASP, CVEs, attack patterns) when relevant
+- Explain the WHY behind mitigations, not just what to do
+- Flag urgency level when appropriate (Critical / High / Medium / Low)
+- Keep responses focused on the user's specific context
+
+Respond in well-structured markdown.\
+"""
+
+
+class AssistStartRequest(BaseModel):
+    user_id:          Optional[str] = Field(None, description="Profile ID or anonymous token")
+    suspected_attack: Optional[str] = Field(None)
+    task_context:     Optional[str] = Field(None, description="Raw incident log / ticket body")
+    user_role:        Optional[str] = Field(None, description="e.g. 'SOC analyst'")
+
+
+class AssistStartResponse(BaseModel):
+    session_id: str
+    title:      str
+
+
+class SessionSummary(BaseModel):
+    id:               str
+    title:            str
+    suspected_attack: Optional[str]
+    user_role:        Optional[str]
+    message_count:    int
+    created_at:       str
+    updated_at:       str
+    last_message:     Optional[str]
+    last_role:        Optional[str]
+
+
+class SessionDetail(BaseModel):
+    id:               str
+    title:            str
+    suspected_attack: Optional[str]
+    task_context:     Optional[str]
+    user_role:        Optional[str]
+    message_count:    int
+    created_at:       str
+    updated_at:       str
+    messages:         list[dict]
+
+
+class RenameRequest(BaseModel):
+    title: str
+
+
+@app.post("/assist/sessions", response_model=AssistStartResponse)
+def assist_create_session(req: AssistStartRequest):
+    """
+    Create a new chat session in Supabase.
+    Returns session_id to use with /assist/stream.
+    """
+    db = _get_db()
+    title = "New chat"
+    if req.suspected_attack:
+        title = f"{req.suspected_attack.replace('_', ' ').title()} — analysis"
+    row = db.create_chat_session(
+        user_id=req.user_id,
+        title=title,
+        suspected_attack=req.suspected_attack,
+        task_context=req.task_context,
+        user_role=req.user_role,
+    )
+    sid = row.get("id", str(uuid.uuid4()))
+    _conversations[sid] = []
+    return AssistStartResponse(session_id=sid, title=row.get("title", title))
+
+
+@app.get("/assist/sessions", response_model=list[SessionSummary])
+def assist_list_sessions(user_id: Optional[str] = None):
+    """List all chat sessions, most-recent first. Pass user_id to filter."""
+    db = _get_db()
+    rows = db.list_chat_sessions(user_id=user_id)
+    return [
+        SessionSummary(
+            id=r["id"],
+            title=r["title"],
+            suspected_attack=r.get("suspected_attack"),
+            user_role=r.get("user_role"),
+            message_count=r.get("message_count", 0),
+            created_at=str(r["created_at"]),
+            updated_at=str(r["updated_at"]),
+            last_message=r.get("last_message"),
+            last_role=r.get("last_role"),
+        )
+        for r in rows
+    ]
+
+
+@app.get("/assist/sessions/{session_id}", response_model=SessionDetail)
+def assist_get_session(session_id: str):
+    """Return full session metadata + all messages (for restoring a conversation)."""
+    db = _get_db()
+    session = db.get_chat_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    messages = db.get_chat_messages(session_id)
+    return SessionDetail(
+        id=session["id"],
+        title=session["title"],
+        suspected_attack=session.get("suspected_attack"),
+        task_context=session.get("task_context"),
+        user_role=session.get("user_role"),
+        message_count=session.get("message_count", 0),
+        created_at=str(session["created_at"]),
+        updated_at=str(session["updated_at"]),
+        messages=messages,
+    )
+
+
+@app.patch("/assist/sessions/{session_id}", response_model=dict)
+def assist_rename_session(session_id: str, req: RenameRequest):
+    """Rename a chat session."""
+    db = _get_db()
+    db.rename_chat_session(session_id, req.title.strip())
+    return {"status": "ok", "title": req.title.strip()}
+
+
+@app.delete("/assist/sessions/{session_id}")
+def assist_delete_session(session_id: str):
+    """Delete session from DB and clear in-memory history."""
+    db = _get_db()
+    db.delete_chat_session(session_id)
+    _conversations.pop(session_id, None)
+    return {"status": "deleted"}
+
+
+@app.get("/assist/stream")
+async def assist_stream(
+    message: str,
+    session_id: Optional[str] = None,
+    task_context: Optional[str] = None,
+    suspected_attack: Optional[str] = None,
+    user_role: Optional[str] = None,
+    user_id: Optional[str] = None,
+):
+    """
+    SSE streaming endpoint — Gemini 2.5 Flash, token-by-token.
+
+    - Creates a DB session automatically if session_id is omitted.
+    - Persists each user + assistant turn to chat_messages after completion.
+    - Maintains in-memory history for multi-turn context within the process.
+
+    SSE protocol:
+        event: meta  →  { session_id, title }        (first event)
+        data: <text> →  escaped text chunk
+        event: error →  { error: "..." }
+        data: [DONE] →  stream finished
+    """
+    db = _get_db()
+
+    # Resolve or create session
+    sid = session_id
+    session_title = "New chat"
+    is_new_session = False
+
+    if not sid:
+        is_new_session = True
+        title = (message[:55] + "…") if len(message) > 55 else message
+        row = db.create_chat_session(
+            user_id=user_id,
+            title=title,
+            suspected_attack=suspected_attack,
+            task_context=task_context,
+            user_role=user_role,
+        )
+        sid = row.get("id") or str(uuid.uuid4())
+        session_title = row.get("title", title)
+    else:
+        sess = db.get_chat_session(sid)
+        if sess:
+            session_title = sess.get("title", "Chat")
+
+    # Restore in-memory history from DB if it's a resumed session
+    if sid not in _conversations:
+        history: list[dict] = []
+        if not is_new_session:
+            for msg in db.get_chat_messages(sid):
+                gemini_role = "model" if msg["role"] == "assistant" else "user"
+                history.append({"role": gemini_role, "parts": [{"text": msg["content"]}]})
+        _conversations[sid] = history
+
+    history = _conversations[sid]
+
+    # RAG injection — pull relevant KB chunks for this message
+    rag_context = ""
+    if task_context or suspected_attack or message:
+        try:
+            retriever = _get_retriever()
+            keywords = message.split()[:8]
+            if task_context:
+                keywords = task_context.split()[:8] + keywords
+            result = retriever.retrieve(
+                RetrievalRequest(
+                    keywords=keywords,
+                    suspected_attack=suspected_attack,
+                    k=8,
+                    min_similarity=0.28,
+                )
+            )
+            if result.assembled_context:
+                rag_context = (
+                    "\n\n---\n**Relevant knowledge base context:**\n"
+                    + result.assembled_context[:3000]
+                    + "\n---\n"
+                )
+        except Exception:
+            pass
+
+    role_prefix = f"[User role: {user_role}] " if user_role else ""
+    context_block = f"\n\nTask context:\n{task_context}" if task_context else ""
+    # clean_message is what we store; full_user_text includes RAG and goes to the model
+    clean_message = f"{role_prefix}{message}{context_block}"
+    full_user_text = clean_message + rag_context
+
+    history.append({"role": "user", "parts": [{"text": full_user_text}]})
+
+    async def event_stream() -> AsyncGenerator[str, None]:
+        gemini = genai.Client(api_key=settings.gemini_api_key)
+
+        yield f"event: meta\ndata: {json.dumps({'session_id': sid, 'title': session_title})}\n\n"
+
+        full_reply = ""
+        try:
+            stream = gemini.models.generate_content_stream(
+                model=ASSIST_MODEL,
+                contents=history,
+                config=gtypes.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=0.4,
+                    max_output_tokens=2048,
+                ),
+            )
+            for chunk in stream:
+                if chunk.text:
+                    full_reply += chunk.text
+                    safe = chunk.text.replace("\n", "\\n")
+                    yield f"data: {safe}\n\n"
+        except Exception as e:
+            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+        finally:
+            if full_reply:
+                # Update in-memory history
+                history.append({"role": "model", "parts": [{"text": full_reply}]})
+                _conversations[sid] = history
+                # Persist to Supabase (fire and forget — don't block the response)
+                try:
+                    db.save_chat_turn(
+                        session_id=sid,
+                        user_text=clean_message,
+                        assistant_text=full_reply,
+                    )
+                except Exception as persist_err:
+                    print(f"[chat persist] {persist_err}")
+
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
