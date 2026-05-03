@@ -56,7 +56,7 @@ graph TD
     end
 
     subgraph "AI Analysis Layer"
-        LOGS[Raw Incident Logs] --> ANL[/analyze endpoint]
+        LOGS[Raw Incident Logs] --> ANL[analyze endpoint]
         ANL --> RET[Retriever]
         VDB --> RET
         RET --> GEM[Gemini 2.5 Flash]
