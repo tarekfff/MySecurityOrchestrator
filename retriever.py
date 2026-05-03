@@ -200,10 +200,11 @@ QUALITY REQUIREMENTS
 ═══════════════════════════════════════════════════════
 1. Generate EXACTLY 5 to 7 steps — enough to fully contain and remediate the incident.
 2. Every "message" field MUST be grounded in the KB excerpt (cite specific mitigations).
-3. SCRIPT / INTEGRATION steps come FIRST (immediate automated containment).
-4. APPROVAL steps come AFTER automated containment, for human oversight.
-5. End with a WEBHOOK step to close the loop (notify Slack / open a ticket).
-6. "params" must be non-empty for INTEGRATION and WEBHOOK steps.
+3. DATA EXTRACTION: Extract critical entities from the "Raw Security Logs" (IPs, usernames, filenames, URLs, hostnames) and use them in "params" and "message". Avoid generic placeholders if the log contains real values.
+4. SCRIPT / INTEGRATION steps come FIRST (immediate automated containment).
+5. APPROVAL steps come AFTER automated containment, for human oversight.
+6. End with a WEBHOOK step to close the loop (notify Slack / open a ticket).
+7. "params" must be non-empty for INTEGRATION and WEBHOOK steps, containing the extracted entities.
 
 ═══════════════════════════════════════════════════════
 OUTPUT SCHEMA — return ONLY valid JSON, no markdown fences
