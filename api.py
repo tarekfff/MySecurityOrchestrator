@@ -534,8 +534,8 @@ def assist_delete_session(session_id: str):
     return {"status": "deleted"}
 
 
-@app.get("/assist/stream")
-async def assist_stream(
+@app.get("/assist/chat")
+async def assist_chat(
     message: str,
     session_id: Optional[str] = None,
     task_context: Optional[str] = None,
@@ -544,17 +544,14 @@ async def assist_stream(
     user_id: Optional[str] = None,
 ):
     """
-    SSE streaming endpoint — Gemini 2.5 Flash, token-by-token.
+    Full response endpoint — Gemini 2.5 Flash, non-streaming.
 
     - Creates a DB session automatically if session_id is omitted.
     - Persists each user + assistant turn to chat_messages after completion.
     - Maintains in-memory history for multi-turn context within the process.
 
-    SSE protocol:
-        event: meta  →  { session_id, title }        (first event)
-        data: <text> →  escaped text chunk
-        event: error →  { error: "..." }
-        data: [DONE] →  stream finished
+    Returns:
+        { "session_id": "...", "title": "...", "reply": "..." }
     """
     db = _get_db()
 
@@ -624,54 +621,40 @@ async def assist_stream(
 
     history.append({"role": "user", "parts": [{"text": full_user_text}]})
 
-    async def event_stream() -> AsyncGenerator[str, None]:
-        gemini = genai.Client(api_key=settings.gemini_api_key)
+    gemini = genai.Client(api_key=settings.gemini_api_key)
+    try:
+        response = gemini.models.generate_content(
+            model=ASSIST_MODEL,
+            contents=history,
+            config=gtypes.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=0.4,
+                max_output_tokens=2048,
+            ),
+        )
+        full_reply = response.text or ""
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-        yield f"event: meta\ndata: {json.dumps({'session_id': sid, 'title': session_title})}\n\n"
-
-        full_reply = ""
+    if full_reply:
+        # Update in-memory history
+        history.append({"role": "model", "parts": [{"text": full_reply}]})
+        _conversations[sid] = history
+        # Persist to Supabase
         try:
-            stream = gemini.models.generate_content_stream(
-                model=ASSIST_MODEL,
-                contents=history,
-                config=gtypes.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    temperature=0.4,
-                    max_output_tokens=2048,
-                ),
+            db.save_chat_turn(
+                session_id=sid,
+                user_text=clean_message,
+                assistant_text=full_reply,
             )
-            for chunk in stream:
-                if chunk.text:
-                    full_reply += chunk.text
-                    safe = chunk.text.replace("\n", "\\n")
-                    yield f"data: {safe}\n\n"
-        except Exception as e:
-            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-        finally:
-            if full_reply:
-                # Update in-memory history
-                history.append({"role": "model", "parts": [{"text": full_reply}]})
-                _conversations[sid] = history
-                # Persist to Supabase (fire and forget — don't block the response)
-                try:
-                    db.save_chat_turn(
-                        session_id=sid,
-                        user_text=clean_message,
-                        assistant_text=full_reply,
-                    )
-                except Exception as persist_err:
-                    print(f"[chat persist] {persist_err}")
+        except Exception as persist_err:
+            print(f"[chat persist] {persist_err}")
 
-            yield "data: [DONE]\n\n"
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    return {
+        "session_id": sid,
+        "title": session_title,
+        "reply": full_reply
+    }
 
 
 @app.post("/ingest/trigger", response_model=IngestStatus)
